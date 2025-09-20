@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.hashtags import router as hashtags_router
+from app.routes.comments import router as comments_router
 
 
 def create_app() -> FastAPI:
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(hashtags_router)
+    app.include_router(comments_router)
 
     return app
 
