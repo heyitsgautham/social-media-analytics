@@ -1,15 +1,16 @@
 from datetime import datetime
+
 from sqlalchemy import (
+    CheckConstraint,
     Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
     Integer,
     String,
-    DateTime,
     Text,
-    ForeignKey,
-    Enum,
     UniqueConstraint,
-    Index,
-    CheckConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
