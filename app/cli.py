@@ -6,6 +6,7 @@ import typer
 from app.db import get_session
 from app.services import seeder
 from app.services.trending import populate_trending_from_db, recommendation_engine, trending_engine
+from app.services.comments import analyze_comment_depth, detect_viral_comment_chains
 
 app = typer.Typer(help="Social Analytics CLI with subcommands")
 
@@ -138,6 +139,61 @@ def trending_status_cmd():
 
     except Exception as e:
         typer.echo(f"❌ Error getting engine status: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command("comments")
+def comments_cmd(
+    action: str = typer.Argument(..., help="Action to perform: 'depth' or 'viral'"),
+    post_id: int = typer.Option(..., "--post", "-p", help="Post ID to analyze", min=1),
+):
+    """Analyze comments for a specific post."""
+    if action not in ["depth", "viral"]:
+        typer.echo("❌ Action must be either 'depth' or 'viral'", err=True)
+        raise typer.Exit(1)
+    
+    try:
+        with get_session() as db:
+            if action == "depth":
+                analysis = analyze_comment_depth(db, post_id)
+                
+                typer.echo(f"\n📊 Comment Depth Analysis for Post {post_id}:")
+                typer.echo("─" * 50)
+                typer.echo(f"Max depth:              {analysis.max_depth}")
+                typer.echo(f"Total comments:         {analysis.total_comments:,}")
+                typer.echo(f"Total replies:          {analysis.total_replies:,}")
+                typer.echo(f"Avg replies/comment:    {analysis.average_replies_per_comment:.2f}")
+                
+                if analysis.total_comments == 0:
+                    typer.echo("\n💬 No comments found for this post")
+                elif analysis.max_depth == 1:
+                    typer.echo("\n💬 All comments are top-level (no nested replies)")
+                else:
+                    typer.echo(f"\n💬 Comments have {analysis.max_depth} levels of nesting")
+            
+            elif action == "viral":
+                analysis = detect_viral_comment_chains(db, post_id)
+                
+                typer.echo(f"\n🔥 Viral Chain Analysis for Post {post_id}:")
+                typer.echo("─" * 50)
+                typer.echo(f"Longest chain length:   {analysis.longest_chain_length}")
+                typer.echo(f"Total viral chains:     {analysis.total_viral_chains}")
+                typer.echo(f"Viral criteria met:     {'✓' if analysis.viral_criteria_met else '✗'}")
+                typer.echo("\nViral criteria: ≥3 replies OR ≥10 upvotes per comment")
+                
+                if analysis.viral_criteria_met:
+                    typer.echo(f"\n🏆 Longest viral chain (comments):")
+                    for i, comment_id in enumerate(analysis.longest_chain_comments, 1):
+                        typer.echo(f"  {i}. Comment #{comment_id}")
+                else:
+                    typer.echo("\n💔 No viral chains found for this post")
+                    typer.echo("Try posts with more engagement or adjust viral criteria")
+                
+    except ValueError as e:
+        typer.echo(f"❌ {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"❌ Error analyzing comments: {e}", err=True)
         raise typer.Exit(1)
 
 
