@@ -5,6 +5,5 @@ alembic
 psycopg2-binary
 pydantic
 python-dotenv
-Faker 
+Faker
 typer
-
