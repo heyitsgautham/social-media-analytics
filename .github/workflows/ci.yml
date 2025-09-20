@@ -23,9 +23,19 @@ jobs:
           --health-timeout=5s
           --health-retries=30
 
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd="redis-cli ping || exit 1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
     env:
-      # NOTE: use localhost now, not the 'postgres' hostname
       DATABASE_URL: postgresql+psycopg2://app:app@localhost:5432/testdb
+      ENABLE_REDIS_CACHE: "true"         
+      REDIS_URL: redis://localhost:6379/0
+      TRENDING_TTL_SECONDS: "60"
       PYTHONPATH: .
 
     steps:
