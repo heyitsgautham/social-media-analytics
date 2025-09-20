@@ -38,6 +38,11 @@ jobs:
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
+      - name: Install Postgres client (psql, pg_isready)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Wait for Postgres to be resolvable and ready
         shell: bash
         run: |
@@ -48,6 +53,7 @@ jobs:
             echo "DNS not ready... ($i)"
             sleep 2
           done
+
           echo "Waiting for pg_isready..."
           for i in {1..30}; do
             if pg_isready -h postgres -p 5432 -U app -d testdb; then
@@ -56,22 +62,9 @@ jobs:
             echo "pg_isready not ready... ($i)"
             sleep 2
           done
-          echo "Python-level connect check via psycopg2..."
-          python - <<'PY'
-            import time, psycopg2, sys
-            dsn = "postgresql://app:app@postgres:5432/testdb"
-            for i in range(20):
-                try:
-                    conn = psycopg2.connect(dsn, timeout=5)
-                    conn.close()
-                    print("Python connect OK")
-                    sys.exit(0)
-                except Exception as e:
-                    print(f"Connect failed ({i+1}): {e}")
-                    time.sleep(2)
-            print("ERROR: Could not connect to Postgres via psycopg2")
-            sys.exit(1)
-            PY
+
+          echo "Verifying with psql (SELECT 1)..."
+          PGPASSWORD=app psql -h postgres -U app -d testdb -v ON_ERROR_STOP=1 -c "SELECT 1;"
 
       - name: Apply migrations
         run: alembic upgrade head
