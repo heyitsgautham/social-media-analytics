@@ -15,14 +15,17 @@ jobs:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: app
           POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd="pg_isready -U app -d testdb"
           --health-interval=5s
           --health-timeout=5s
-          --health-retries=20
+          --health-retries=30
 
     env:
-      DATABASE_URL: postgresql+psycopg2://app:app@postgres:5432/testdb
+      # NOTE: use localhost now, not the 'postgres' hostname
+      DATABASE_URL: postgresql+psycopg2://app:app@localhost:5432/testdb
       PYTHONPATH: .
 
     steps:
@@ -43,28 +46,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Wait for Postgres to be resolvable and ready
+      - name: Wait for Postgres on localhost
         shell: bash
         run: |
           set -e
-          echo "Checking DNS for 'postgres'..."
-          for i in {1..30}; do
-            getent hosts postgres && break
-            echo "DNS not ready... ($i)"
-            sleep 2
-          done
-
-          echo "Waiting for pg_isready..."
-          for i in {1..30}; do
-            if pg_isready -h postgres -p 5432 -U app -d testdb; then
+          echo "Waiting for pg_isready on localhost..."
+          for i in {1..60}; do
+            if pg_isready -h 127.0.0.1 -p 5432 -U app -d testdb; then
               break
             fi
             echo "pg_isready not ready... ($i)"
             sleep 2
           done
 
-          echo "Verifying with psql (SELECT 1)..."
-          PGPASSWORD=app psql -h postgres -U app -d testdb -v ON_ERROR_STOP=1 -c "SELECT 1;"
+          echo "Verifying with psql (SELECT 1) on localhost..."
+          PGPASSWORD=app psql -h 127.0.0.1 -U app -d testdb -v ON_ERROR_STOP=1 -c "SELECT 1;"
 
       - name: Apply migrations
         run: alembic upgrade head
