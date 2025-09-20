@@ -15,15 +15,15 @@ jobs:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: app
           POSTGRES_DB: testdb
-        # no ports needed when you use the service hostname
+        # No host port mapping needed when using the service hostname "postgres"
         options: >-
           --health-cmd="pg_isready -U app -d testdb"
           --health-interval=5s
           --health-timeout=5s
-          --health-retries=10
+          --health-retries=20
 
     env:
-      # IMPORTANT: use the service hostname "postgres"
+      # IMPORTANT: service hostname "postgres" (not localhost)
       DATABASE_URL: postgresql+psycopg2://app:app@postgres:5432/testdb
       PYTHONPATH: .
 
@@ -40,13 +40,42 @@ jobs:
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
-      - name: Wait for Postgres to be ready
+      - name: Wait for Postgres to be resolvable and ready
+        shell: bash
         run: |
+          set -e
+
+          echo "Checking DNS for 'postgres'..."
           for i in {1..30}; do
-            pg_isready -h postgres -p 5432 -U app -d testdb && break
-            echo "waiting for db... ($i)"
+            getent hosts postgres && break
+            echo "DNS not ready... ($i)"
             sleep 2
           done
+
+          echo "Waiting for pg_isready..."
+          for i in {1..30}; do
+            if pg_isready -h postgres -p 5432 -U app -d testdb; then
+              break
+            fi
+            echo "pg_isready not ready... ($i)"
+            sleep 2
+          done
+
+          echo "Python-level connect check via psycopg2..."
+          python - <<'PY'
+import time, psycopg2, os, sys
+dsn = "postgresql://app:app@postgres:5432/testdb"
+for i in range(20):
+    try:
+        psycopg2.connect(dsn).close()
+        print("Python connect OK")
+        sys.exit(0)
+    except Exception as e:
+        print(f"Connect failed ({i+1}): {e}")
+        time.sleep(2)
+print("ERROR: Could not connect to Postgres via psycopg2")
+sys.exit(1)
+PY
 
       - name: Apply migrations
         run: alembic upgrade head
