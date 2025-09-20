@@ -7,6 +7,7 @@ from app.db import get_session
 from app.services import seeder
 from app.services.trending import populate_trending_from_db, recommendation_engine, trending_engine
 from app.services.comments import analyze_comment_depth, detect_viral_comment_chains
+from app.services.reports import get_most_engaged_users, get_top_hashtags, get_fastest_growing_hashtags
 
 app = typer.Typer(help="Social Analytics CLI with subcommands")
 
@@ -194,6 +195,109 @@ def comments_cmd(
         raise typer.Exit(1)
     except Exception as e:
         typer.echo(f"❌ Error analyzing comments: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command("reports")
+def reports_cmd(
+    report_type: str = typer.Argument(..., help="Report type: 'users' or 'hashtags'"),
+    limit: int = typer.Option(10, "--limit", "-l", help="Number of results to show (1-50)", min=1, max=50),
+    hours: int = typer.Option(24, "--hours", "-h", help="Hours for growth analysis (hashtags only)", min=1, max=168),
+):
+    """Generate engagement reports and analytics."""
+    if report_type not in ["users", "hashtags"]:
+        typer.echo("❌ Report type must be either 'users' or 'hashtags'", err=True)
+        raise typer.Exit(1)
+    
+    try:
+        with get_session() as db:
+            if report_type == "users":
+                # Most engaged users report
+                users_data = get_most_engaged_users(db, limit=limit)
+                
+                if not users_data:
+                    typer.echo("No engaged users found")
+                    return
+                
+                typer.echo(f"\n👥 Top {len(users_data)} Most Engaged Users:")
+                typer.echo("─" * 80)
+                typer.echo(f"{'#':<3} {'Handle':<20} {'Total':<8} {'Posts':<8} {'Comments':<8} {'P Count':<8} {'C Count':<8}")
+                typer.echo("─" * 80)
+                
+                for i, user in enumerate(users_data, 1):
+                    typer.echo(
+                        f"{i:<3} "
+                        f"@{user['handle']:<19} "
+                        f"{user['total_engagements']:<8,} "
+                        f"{user['post_engagements']:<8,} "
+                        f"{user['comment_engagements']:<8,} "
+                        f"{user['posts_count']:<8,} "
+                        f"{user['comments_count']:<8,}"
+                    )
+                
+                # Summary stats
+                total_engagements = sum(u['total_engagements'] for u in users_data)
+                avg_engagements = total_engagements / len(users_data) if users_data else 0
+                typer.echo("─" * 80)
+                typer.echo(f"Total engagements: {total_engagements:,}")
+                typer.echo(f"Average per user:  {avg_engagements:.1f}")
+                
+            elif report_type == "hashtags":
+                # Top hashtags and growth analysis
+                typer.echo(f"\n📊 Hashtag Analytics Report:")
+                typer.echo("=" * 60)
+                
+                # Top hashtags by unique users
+                hashtags_data = get_top_hashtags(db, limit=limit)
+                
+                if hashtags_data:
+                    typer.echo(f"\n🏆 Top {len(hashtags_data)} Hashtags by Unique Users:")
+                    typer.echo("─" * 60)
+                    typer.echo(f"{'#':<3} {'Hashtag':<25} {'Users':<8} {'Posts':<8}")
+                    typer.echo("─" * 60)
+                    
+                    for i, hashtag in enumerate(hashtags_data, 1):
+                        typer.echo(
+                            f"{i:<3} "
+                            f"#{hashtag['hashtag_name']:<24} "
+                            f"{hashtag['unique_users']:<8,} "
+                            f"{hashtag['total_posts']:<8,}"
+                        )
+                else:
+                    typer.echo("\n🏆 No hashtags found")
+                
+                # Fastest growing hashtags
+                from datetime import datetime, timedelta
+                since = datetime.utcnow() - timedelta(hours=hours)
+                growing_data = get_fastest_growing_hashtags(db, since=since, limit=limit)
+                
+                if growing_data:
+                    typer.echo(f"\n🚀 Fastest Growing Hashtags (last {hours} hours):")
+                    typer.echo("─" * 70)
+                    typer.echo(f"{'#':<3} {'Hashtag':<25} {'Growth':<8} {'Recent':<8} {'Total':<8}")
+                    typer.echo("─" * 70)
+                    
+                    for i, hashtag in enumerate(growing_data, 1):
+                        growth_pct = hashtag['growth_rate'] * 100
+                        typer.echo(
+                            f"{i:<3} "
+                            f"#{hashtag['hashtag_name']:<24} "
+                            f"{growth_pct:<7.1f}% "
+                            f"{hashtag['recent_posts']:<8,} "
+                            f"{hashtag['total_posts']:<8,}"
+                        )
+                    
+                    # Summary for growth
+                    avg_growth = sum(h['growth_rate'] for h in growing_data) / len(growing_data) * 100
+                    typer.echo("─" * 70)
+                    typer.echo(f"Average growth rate: {avg_growth:.1f}%")
+                    typer.echo(f"Analysis period: {hours} hours")
+                else:
+                    typer.echo(f"\n🚀 No growing hashtags found in last {hours} hours")
+                    typer.echo("Try a longer time period or check if there's recent activity")
+                
+    except Exception as e:
+        typer.echo(f"❌ Error generating {report_type} report: {e}", err=True)
         raise typer.Exit(1)
 
 

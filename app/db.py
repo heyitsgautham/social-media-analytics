@@ -9,8 +9,10 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
+from typing import Generator
+
 @contextmanager
-def get_session() -> Session:
+def get_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     try:
         yield session
