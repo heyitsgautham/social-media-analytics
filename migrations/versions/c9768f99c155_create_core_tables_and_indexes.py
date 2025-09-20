@@ -1,7 +1,7 @@
 """create core tables and indexes
 
 Revision ID: c9768f99c155
-Revises: 
+Revises:
 Create Date: 2025-09-20 11:12:25.128710
 
 """
