@@ -7,3 +7,6 @@ pydantic
 python-dotenv
 Faker
 typer
+redis
+tenacity
+httpx

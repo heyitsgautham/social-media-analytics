@@ -5,16 +5,105 @@ Implements real-time hashtag trending with sliding window counts and
 recommendation engine for co-occurring hashtags.
 """
 
+import json
 import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
+import redis
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
+from tenacity import retry, stop_after_attempt, wait_exponential
 
+from app.config import (
+    DB_RETRY_ATTEMPTS,
+    DB_RETRY_MAX_WAIT,
+    DB_RETRY_MIN_WAIT,
+    ENABLE_REDIS_CACHE,
+    REDIS_URL,
+    TRENDING_TTL_SECONDS,
+)
 from app.db import get_session
 from app.models import Hashtag, Post, PostHashtag
+
+
+class RedisClient:
+    """Redis client wrapper with connection handling and failover."""
+
+    def __init__(self):
+        """Initialize Redis client."""
+        self._client: Optional[redis.Redis] = None
+        self._enabled = ENABLE_REDIS_CACHE
+        self._initialize_client()
+
+    def _initialize_client(self) -> None:
+        """Initialize Redis connection if enabled."""
+        if not self._enabled:
+            return
+
+        try:
+            self._client = redis.from_url(REDIS_URL, decode_responses=True)
+            # Test connection
+            self._client.ping()
+        except Exception as e:
+            print(f"Redis connection failed: {e}. Falling back to in-memory only.")
+            self._client = None
+
+    @property
+    def is_available(self) -> bool:
+        """Check if Redis is available."""
+        return self._enabled and self._client is not None
+
+    def get(self, key: str) -> Optional[str]:
+        """Get value from Redis with error handling."""
+        if not self.is_available:
+            return None
+
+        try:
+            return self._client.get(key)
+        except Exception as e:
+            print(f"Redis GET error for key {key}: {e}")
+            return None
+
+    def set(self, key: str, value: str, ttl: int) -> bool:
+        """Set value in Redis with TTL and error handling."""
+        if not self.is_available:
+            return False
+
+        try:
+            self._client.setex(key, ttl, value)
+            return True
+        except Exception as e:
+            print(f"Redis SET error for key {key}: {e}")
+            return False
+
+    def delete(self, key: str) -> bool:
+        """Delete key from Redis with error handling."""
+        if not self.is_available:
+            return False
+
+        try:
+            self._client.delete(key)
+            return True
+        except Exception as e:
+            print(f"Redis DELETE error for key {key}: {e}")
+            return False
+
+    def ping(self) -> bool:
+        """Test Redis connectivity."""
+        if not self.is_available:
+            return False
+
+        try:
+            self._client.ping()
+            return True
+        except Exception:
+            return False
+
+
+# Global Redis client
+redis_client = RedisClient()
 
 
 class TrendingEngine:
@@ -108,6 +197,8 @@ class TrendingEngine:
         """
         Get top k hashtags by count within window.
 
+        Uses Redis caching when available to improve performance.
+
         Args:
             k: Number of top hashtags to return
             window_minutes: Window size (uses instance default if None)
@@ -115,13 +206,48 @@ class TrendingEngine:
         Returns:
             List of (hashtag, count) tuples, sorted by count descending
         """
-        self._cleanup_old_buckets()
-
         window = window_minutes if window_minutes is not None else self.window_minutes
 
         # Handle zero or negative window
         if window <= 0:
             return []
+
+        # Try to get from cache first
+        cache_key = f"cache:trending:{window}:{k}"
+        cached_result = redis_client.get(cache_key)
+
+        if cached_result:
+            try:
+                # Parse cached JSON result
+                cached_data = json.loads(cached_result)
+                return [(item["hashtag"], item["count"]) for item in cached_data]
+            except (json.JSONDecodeError, KeyError):
+                # If cache is corrupted, continue to compute fresh result
+                pass
+
+        # Compute result using in-memory engine
+        result = self._compute_top(k, window)
+
+        # Cache the result if Redis is available
+        if redis_client.is_available and result:
+            cache_data = [{"hashtag": hashtag, "count": count} for hashtag, count in result]
+            cache_value = json.dumps(cache_data)
+            redis_client.set(cache_key, cache_value, TRENDING_TTL_SECONDS)
+
+        return result
+
+    def _compute_top(self, k: int, window: int) -> List[Tuple[str, int]]:
+        """
+        Compute top hashtags without caching.
+
+        Args:
+            k: Number of top hashtags to return
+            window: Window size in minutes
+
+        Returns:
+            List of (hashtag, count) tuples, sorted by count descending
+        """
+        self._cleanup_old_buckets()
 
         current_minute = self._get_minute_timestamp()
         cutoff = current_minute - window
@@ -137,6 +263,21 @@ class TrendingEngine:
         hashtag_counts.sort(key=lambda x: (-x[1], x[0]))
 
         return hashtag_counts[:k]
+
+    def invalidate_cache(self, k: int = 10, window_minutes: Optional[int] = None) -> bool:
+        """
+        Invalidate cached trending results.
+
+        Args:
+            k: Number of hashtags in cached result
+            window_minutes: Window size used in cached result
+
+        Returns:
+            True if cache was invalidated, False if cache not available
+        """
+        window = window_minutes if window_minutes is not None else self.window_minutes
+        cache_key = f"cache:trending:{window}:{k}"
+        return redis_client.delete(cache_key)
 
     def get_status(self) -> Dict[str, int]:
         """
@@ -175,6 +316,11 @@ class RecommendationEngine:
         """
         self.min_cooccurrence_rate = min_cooccurrence_rate
 
+    @retry(
+        stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
+        wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
+        reraise=True,
+    )
     def get_recommendations(
         self, hashtag: str, max_recommendations: int = 3
     ) -> List[Tuple[str, float]]:
@@ -252,6 +398,11 @@ trending_engine = TrendingEngine()
 recommendation_engine = RecommendationEngine()
 
 
+@retry(
+    stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
+    reraise=True,
+)
 def populate_trending_from_db(minutes_back: int = 60) -> None:
     """
     Populate trending engine with recent hashtag data from database.
@@ -285,6 +436,9 @@ def populate_trending_from_db(minutes_back: int = 60) -> None:
         for (minute_timestamp, hashtag_name), count in minute_hashtag_counts.items():
             # Set the count directly in the appropriate bucket
             trending_engine.counters[hashtag_name][minute_timestamp] = count
+
+        # Invalidate trending cache since we updated the data
+        trending_engine.invalidate_cache()
 
 
 def simulate_realtime_updates() -> None:

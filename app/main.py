@@ -2,12 +2,16 @@
 Main FastAPI application for Social Media Analytics Platform.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
+import traceback
 
 from app.routes.hashtags import router as hashtags_router
 from app.routes.comments import router as comments_router
 from app.routes.reports import router as reports_router
+from app.routes.health import router as health_router
 
 
 def create_app() -> FastAPI:
@@ -34,10 +38,40 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Global exception handlers
+    @app.exception_handler(SQLAlchemyError)
+    async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+        """Handle SQLAlchemy database errors."""
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": "DATABASE_ERROR",
+                "message": "Database operation failed",
+                "details": str(exc) if app.debug else "Database connection issue",
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def general_exception_handler(request: Request, exc: Exception):
+        """Handle all other unhandled exceptions."""
+        # Log the full traceback for debugging
+        error_traceback = traceback.format_exc()
+        print(f"Unhandled exception: {error_traceback}")
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "details": str(exc) if app.debug else "Internal server error",
+            },
+        )
+
     # Include routers
     app.include_router(hashtags_router)
     app.include_router(comments_router)
     app.include_router(reports_router)
+    app.include_router(health_router)
 
     return app
 
@@ -54,20 +88,9 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check endpoint."""
-    from app.services.trending import trending_engine
-
-    try:
-        engine_status = trending_engine.get_status()
-        return {
-            "status": "healthy",
-            "services": {
-                "trending_engine": {"status": "active", "metrics": engine_status},
-                "database": {"status": "connected"},  # TODO: Add actual DB health check
-            },
-        }
-    except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+    """Detailed health check endpoint (legacy - redirects to /health/)."""
+    from app.routes.health import health_check as detailed_health_check
+    return await detailed_health_check()
 
 
 if __name__ == "__main__":

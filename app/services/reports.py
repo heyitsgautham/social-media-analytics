@@ -4,10 +4,17 @@ from typing import List, Tuple, Dict, Any
 
 from sqlalchemy import func, text, desc, and_
 from sqlalchemy.orm import Session
+from tenacity import retry, stop_after_attempt, wait_exponential
 
+from app.config import DB_RETRY_ATTEMPTS, DB_RETRY_MIN_WAIT, DB_RETRY_MAX_WAIT
 from app.models import User, Post, Hashtag, PostHashtag, Engagement, Comment
 
 
+@retry(
+    stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
+    reraise=True,
+)
 def get_most_engaged_users(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Get users ranked by total engagements (likes, comments, shares, views).
@@ -81,6 +88,11 @@ def get_most_engaged_users(session: Session, limit: int = 10) -> List[Dict[str, 
     ]
 
 
+@retry(
+    stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
+    reraise=True,
+)
 def get_top_hashtags(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Get top hashtags by unique users who used them.
@@ -123,6 +135,11 @@ def get_top_hashtags(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
     ]
 
 
+@retry(
+    stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
+    reraise=True,
+)
 def get_fastest_growing_hashtags(
     session: Session, since: datetime, limit: int = 10
 ) -> List[Dict[str, Any]]:
@@ -191,114 +208,106 @@ def get_fastest_growing_hashtags(
     ]
 
 
+@retry(
+    stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
+    reraise=True,
+)
 def insert_engagement_with_transaction(
-    session: Session,
+    db: Session,
     user_id: int,
     target_type: str,
     target_id: int,
     kind: str,
     also_increment_counter: bool = True,
-) -> Dict[str, Any]:
+) -> dict:
+    """Insert engagement record with transaction management.
+    
+    For testing purposes, user_ids >= 999999 will trigger a simulated failure.
+    Returns a dictionary with operation status and details.
     """
-    Insert engagement and optionally update a counter atomically.
+    # Check for simulated error (testing)
+    if user_id >= 999999:
+        raise Exception("Simulated transaction failure for testing")
     
-    Demonstrates transaction usage with potential rollback scenarios.
-    This is a simplified example - in practice you might update cached counters,
-    trigger notifications, etc.
+    # Validate target_type
+    valid_target_types = ["post", "comment"]
+    if target_type not in valid_target_types:
+        raise ValueError(f"Invalid target_type. Must be one of: {valid_target_types}")
     
-    Args:
-        session: Database session (should be managed by caller)
-        user_id: ID of user creating engagement
-        target_type: 'post' or 'comment'
-        target_id: ID of target post/comment
-        kind: Type of engagement ('like', 'share', 'view', 'bookmark')
-        also_increment_counter: Whether to also update a counter table
-        
-    Returns:
-        Dict with engagement info and transaction result
-        
-    Raises:
-        ValueError: If validation fails
-        Exception: If transaction fails
-    """
-    from app.models import TargetType, EngagementKind
-    
-    # Validate inputs
-    if target_type not in [t.value for t in TargetType]:
-        raise ValueError(f"Invalid target_type: {target_type}")
-    
-    if kind not in [k.value for k in EngagementKind]:
-        raise ValueError(f"Invalid engagement kind: {kind}")
-    
-    # Verify target exists
-    if target_type == "post":
-        target = session.query(Post).filter(Post.id == target_id).first()
-        if not target:
-            raise ValueError(f"Post {target_id} not found")
-    elif target_type == "comment":
-        target = session.query(Comment).filter(Comment.id == target_id).first()
-        if not target:
-            raise ValueError(f"Comment {target_id} not found")
+    # Validate kind
+    valid_kinds = ["like", "bookmark", "share"]
+    if kind not in valid_kinds:
+        raise ValueError(f"Invalid engagement kind. Must be one of: {valid_kinds}")
     
     # Verify user exists
-    user = session.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise ValueError(f"User {user_id} not found")
     
+    # Verify target exists
+    if target_type == "post":
+        target = db.query(Post).filter(Post.id == target_id).first()
+        if not target:
+            raise ValueError(f"Post {target_id} not found")
+    elif target_type == "comment":
+        target = db.query(Comment).filter(Comment.id == target_id).first()
+        if not target:
+            raise ValueError(f"Comment {target_id} not found")
+    
     # Check for duplicate engagement
     existing = (
-        session.query(Engagement)
+        db.query(Engagement)
         .filter(
-            and_(
-                Engagement.user_id == user_id,
-                Engagement.target_type == target_type,
-                Engagement.target_id == target_id,
-                Engagement.kind == kind,
-            )
+            Engagement.user_id == user_id,
+            Engagement.target_type == target_type,
+            Engagement.target_id == target_id,
+            Engagement.kind == kind,
         )
         .first()
     )
-    
     if existing:
         raise ValueError(f"User {user_id} already has {kind} engagement on {target_type} {target_id}")
     
-    try:
-        # Insert the engagement
-        engagement = Engagement(
-            user_id=user_id,
-            target_type=target_type,
-            target_id=target_id,
-            kind=kind,
-            created_at=datetime.utcnow(),
-        )
-        session.add(engagement)
-        session.flush()  # Get the ID without committing
-        
-        # Optionally increment a counter (simulate additional work)
-        counter_updated = False
-        if also_increment_counter:
-            # For demonstration, we'll update the comment upvotes if it's a like on a comment
-            if target_type == "comment" and kind == "like":
-                comment = session.query(Comment).filter(Comment.id == target_id).first()
-                if comment:
-                    comment.upvotes += 1
-                    counter_updated = True
-        
-        # Force an error for testing rollback (only if user_id is 999999)
-        if user_id == 999999:
-            raise Exception("Simulated transaction failure for testing")
-        
-        return {
-            "engagement_id": engagement.id,
-            "user_id": user_id,
-            "target_type": target_type,
-            "target_id": target_id,
-            "kind": kind,
-            "created_at": engagement.created_at,
-            "counter_updated": counter_updated,
-            "success": True,
-        }
-        
-    except Exception as e:
-        # Let the caller handle rollback
-        raise e
+    # Insert engagement
+    engagement = Engagement(
+        user_id=user_id,
+        target_type=target_type,
+        target_id=target_id,
+        kind=kind,
+        created_at=datetime.utcnow(),
+    )
+    db.add(engagement)
+    db.flush()  # Get the ID
+    
+    counter_updated = False
+    if also_increment_counter:
+        # Increment hashtag counts if this is a post engagement
+        if target_type == "post":
+            post = db.query(Post).filter(Post.id == target_id).first()
+            if post and post.hashtags:
+                for hashtag_text in post.hashtags:
+                    # Find or create hashtag
+                    hashtag = db.query(Hashtag).filter(Hashtag.tag == hashtag_text).first()
+                    if hashtag:
+                        hashtag.engagement_count = (hashtag.engagement_count or 0) + 1
+                    else:
+                        hashtag = Hashtag(tag=hashtag_text, engagement_count=1)
+                        db.add(hashtag)
+                counter_updated = True
+        # Increment comment upvotes if this is a comment like
+        elif target_type == "comment" and kind == "like":
+            comment = db.query(Comment).filter(Comment.id == target_id).first()
+            if comment:
+                comment.upvotes = (comment.upvotes or 0) + 1
+                counter_updated = True
+    
+    return {
+        "success": True,
+        "engagement_id": engagement.id,
+        "user_id": user_id,
+        "target_type": target_type,
+        "target_id": target_id,
+        "kind": kind,
+        "counter_updated": counter_updated,
+    }

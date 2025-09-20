@@ -313,12 +313,21 @@ def test_insert_engagement_invalid_user_error(test_data):
 
 def test_insert_engagement_transaction_rollback(test_data):
     """Test transaction rollback on simulated error."""
+    import time
+    # Use a more unique user ID to avoid conflicts
+    test_user_id = 999999 + int(time.time() * 1000) % 10000
+    
     with get_session() as db:
         # Count initial engagements
         initial_count = db.query(Engagement).count()
         
-        # Create a user with ID 999999 to pass user validation (in same transaction)
-        test_user = User(id=999999, handle="test_rollback_user")
+        # Clean up any existing data for this user first
+        db.query(Engagement).filter(Engagement.user_id == test_user_id).delete()
+        db.query(User).filter(User.id == test_user_id).delete()
+        db.flush()
+        
+        # Create a user with the test ID to pass user validation (in same transaction)
+        test_user = User(id=test_user_id, handle=f"test_rollback_user_{test_user_id}")
         db.add(test_user)
         db.flush()  # Make user available in this transaction without committing
         
@@ -326,7 +335,7 @@ def test_insert_engagement_transaction_rollback(test_data):
         with pytest.raises(Exception, match="Simulated transaction failure"):
             insert_engagement_with_transaction(
                 db,
-                user_id=999999,  # Special ID that triggers error
+                user_id=test_user_id,  # Use our unique test user ID
                 target_type="post",
                 target_id=1,
                 kind="like",
@@ -341,7 +350,7 @@ def test_insert_engagement_transaction_rollback(test_data):
         assert final_count == initial_count
         
         # Verify test user was also rolled back
-        rolled_back_user = db.query(User).filter(User.id == 999999).first()
+        rolled_back_user = db.query(User).filter(User.id == test_user_id).first()
         assert rolled_back_user is None
 
 
