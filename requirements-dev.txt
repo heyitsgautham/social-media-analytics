@@ -1,0 +1,6 @@
+pre-commit        # For running automated checks before git commits
+black==24.8.0     # Code formatter (forces consistent style)
+isort==5.13.2     # Automatically sorts imports
+flake8==7.1.1     # Linter (checks code for errors and style violations)
+mypy==1.10.0      # Static type checker
+pytest==8.2.0     # Testing framework
