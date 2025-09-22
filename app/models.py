@@ -41,6 +41,7 @@ class Post(Base):
 
 
 Index("idx_posts_created", Post.created_at.desc())
+Index("idx_posts_user_created", Post.user_id, Post.created_at)
 
 
 class Hashtag(Base):
