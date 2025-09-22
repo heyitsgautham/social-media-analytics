@@ -19,6 +19,9 @@ def seed_cmd(
     hashtags: int = typer.Option(150, help="Number of unique hashtags"),
 ):
     """Populate the database with mock data."""
+    # Set deterministic seeds for reproducible data
+    seeder.seed_random_generators()
+    
     with get_session() as db:
         us = seeder.make_users(db, users)
         tags = seeder.make_hashtags(db, hashtags)

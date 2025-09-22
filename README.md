@@ -96,7 +96,7 @@ DB_RETRY_MAX_WAIT=10
 # Run migrations
 alembic upgrade head
 
-# Seed database with sample data
+# Seed database with sample data (deterministic generation for reproducible demos)
 python -m app.cli seed --users 1000 --posts 10000 --hashtags 150
 ```
 
@@ -127,6 +127,8 @@ python -m app.cli seed
 # Seed with custom values
 python -m app.cli seed --users 5000 --posts 50000 --hashtags 300
 ```
+
+**Note**: The seeder uses deterministic random generation with fixed seeds (`random.seed(1337)` and `Faker.seed(1337)`), ensuring reproducible data for demos and testing. Running the seed command multiple times will generate identical data sets, making it perfect for consistent development environments and reproducible demonstrations.
 
 #### Trending Analysis
 ```bash
