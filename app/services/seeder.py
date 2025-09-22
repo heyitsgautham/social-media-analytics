@@ -21,6 +21,14 @@ from app.models import (
 fake = Faker()
 
 
+def seed_random_generators():
+    """Set deterministic seeds for reproducible data generation."""
+    global fake
+    random.seed(1337)
+    fake = Faker()
+    fake.seed_instance(1337)
+
+
 def make_users(db: Session, n_users: int) -> list[User]:
     users = [User(handle=fake.unique.user_name()) for _ in range(n_users)]
     db.add_all(users)
