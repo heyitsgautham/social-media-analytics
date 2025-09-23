@@ -62,6 +62,14 @@ def trending_cmd(
         # Get trending hashtags
         trending_data = trending_engine.top(k=k, window_minutes=window)
 
+        # If no data and we haven't synced yet, try auto-syncing
+        if not trending_data and not sync:
+            typer.echo("No trending data found. Auto-syncing from database...")
+            populate_trending_from_db(minutes_back=window)  # Sync for the window we're checking
+            trending_data = trending_engine.top(k=k, window_minutes=window)
+            if trending_data:
+                typer.echo("✓ Auto-sync complete")
+
         if not trending_data:
             typer.echo(f"No trending hashtags found in the last {window} minutes")
             return
@@ -302,6 +310,39 @@ def reports_cmd(
     except Exception as e:
         typer.echo(f"❌ Error generating {report_type} report: {e}", err=True)
         raise typer.Exit(1)
+
+
+@app.command("refresh")
+def refresh_cmd(
+    posts: int = typer.Option(100, help="Number of new posts to add"),
+):
+    """Add fresh posts to keep trending data current."""
+    # Use a random seed to get different data each time
+    import random
+    import time
+    seed = int(time.time() * 1000000) % 2**32
+    random.seed(seed)
+    seeder.fake.seed_instance(seed)  # Seed the fake instance
+    
+    with get_session() as db:
+        # Get existing users and hashtags
+        from app.models import User, Hashtag
+        users = db.query(User).all()
+        hashtags = db.query(Hashtag).all()
+        
+        if not users or not hashtags:
+            typer.echo("❌ No users or hashtags found. Run 'seed' first.")
+            return
+        
+        ps = seeder.make_posts(db, users, hashtags, posts)
+        seeder.make_comments(db, ps, users, frac_with_threads=0.6)
+        seeder.make_engagements(db, ps, users)
+    
+    # Invalidate trending cache since we added new data
+    trending_engine.invalidate_cache(k=10, window_minutes=60)
+    trending_engine.invalidate_cache(k=10, window_minutes=1440)  # Common values
+    
+    typer.echo(f"✅ Added {posts} fresh posts to keep data current")
 
 
 if __name__ == "__main__":

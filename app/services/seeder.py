@@ -21,12 +21,15 @@ from app.models import (
 fake = Faker()
 
 
-def seed_random_generators():
-    """Set deterministic seeds for reproducible data generation."""
+def seed_random_generators(seed=None):
+    """Set seeds for data generation. If seed is None, uses random seed."""
     global fake
-    random.seed(1337)
+    if seed is None:
+        import time
+        seed = int(time.time() * 1000000) % 2**32  # Random seed based on time
+    random.seed(seed)
     fake = Faker()
-    fake.seed_instance(1337)
+    fake.seed_instance(seed)
 
 
 def make_users(db: Session, n_users: int) -> list[User]:
@@ -71,10 +74,12 @@ def make_hashtags(db: Session, n_tags: int) -> list[Hashtag]:
 def make_posts(
     db: Session, users: Sequence[User], hashtags: Sequence[Hashtag], n_posts: int
 ) -> list[Post]:
+    from datetime import datetime, timedelta
     posts: list[Post] = []
     for _ in range(n_posts):
         u = random.choice(users)
-        created = fake.date_time_between(start_date="-60d", end_date="now")
+        # For refresh, create posts at current time to ensure they are in the window
+        created = datetime.utcnow()
         content = fake.sentence(nb_words=random.randint(8, 20))
         p = Post(user_id=u.id, content=content, created_at=created)
         db.add(p)

@@ -1,0 +1,42 @@
+Build a Social Media Analytics Platform that processes user engagement data, provides insights, and scales efficiently. This challenge integrates all your Week 1 topics into one cohesive project!
+Product Requirements
+1. Data Processing Engine (HashMap + Recursion)
+HashMap Challenge: Build a real-time hashtag trending system
+Track hashtag frequencies across posts
+Build hashtag recommendation engine that suggests top 3 related hashtags with >30% co-occurrence rate
+Recursion Challenge: Comment thread analyzer
+Parse nested comment structures (recursive traversal)
+Calculate engagement depth (No of nested replies, ... etc) scores recursively
+Find viral comment chains using recursive backtracking
+Experiment memoization for performance (Optional)
+2. Database Layer (SQL Joins + Indexing + Transactions)
+Tasks:
+Complex JOIN queries for user engagement reports (BYO Use Cases)
+Find "most engaged users" with complex JOINs
+Create optimal indexes for hashtag searches
+Implement atomic database transactions for data consistency
+3. System Design Implementation (Optional - Bonus Points)
+Design caching strategy for trending hashtags
+Add basic fault tolerance with retry mechanisms and proper error handlings
+4. GitHub Collaboration Workflow (Mandatory)
+Use feature branching (feature/hashtag-engine, feature/comment-parser)
+Make Atomic Commits with descriptive messages
+Conduct PR reviews with your mentors
+Deliverables
+GitHub Repository with:
+Clean atomic commit history with meaningful messages
+Comprehensive README about your learnings
+All code properly reviewed via PRs
+Working Application featuring:
+Driver Function (We can directly test them via CLI) / Local API endpoints (CURL - Completely Optional)
+Database with sample data
+5-Minute Demo covering:
+Live hashtag trending
+Comment thread analysis
+Compare & Contrasting System performance w and w/o system design techniques (Optional)
+General Instruction:
+Select any programming language or database of your choice.
+Design an appropriate database schema and populate it with substantial mock data to suit the intended use case.
+Prioritize the tasks
+
+
