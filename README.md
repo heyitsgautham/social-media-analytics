@@ -5,8 +5,9 @@ A real-time social media analytics platform that processes user engagement data,
 ## 🎯 Purpose
 
 This platform demonstrates end-to-end engineering workflows with a focus on:
+
 - **Real-time analytics**: Trending hashtag detection with sliding window counters
-- **Deep insights**: Comment thread analysis and viral chain detection  
+- **Deep insights**: Comment thread analysis and viral chain detection
 - **Engagement reports**: Complex SQL aggregations for user and content analytics
 - **Scalable architecture**: Redis caching, retry mechanisms, and fault tolerance
 - **Production-ready**: FastAPI + SQLAlchemy + Alembic + comprehensive testing
@@ -23,7 +24,7 @@ This platform demonstrates end-to-end engineering workflows with a focus on:
 └─────────┬───────┘      └─────────┬───────┘      │ • Hashtags      │
           │                        |              └─────────┬───────┘
           |                        |                        |
-          │                        |                        | 
+          │                        |                        |
           └────────────────────────┴────────────────────────┘
                                    │
                                    │
@@ -111,6 +112,7 @@ python -m uvicorn app.main:app --reload
 ```
 
 The API will be available at:
+
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 - **Health Check**: http://localhost:8000/health
@@ -120,6 +122,7 @@ The API will be available at:
 ### CLI Commands
 
 #### Database Seeding
+
 ```bash
 # Seed with default values (1000 users, 10000 posts, 150 hashtags)
 python -m app.cli seed
@@ -131,6 +134,7 @@ python -m app.cli seed --users 5000 --posts 50000 --hashtags 300
 **Note**: The seeder uses deterministic random generation with fixed seeds (`random.seed(1337)` and `Faker.seed(1337)`), ensuring reproducible data for demos and testing. Running the seed command multiple times will generate identical data sets, making it perfect for consistent development environments and reproducible demonstrations.
 
 #### Trending Analysis
+
 ```bash
 # Get top 10 trending hashtags in last hour
 python -m app.cli trending --window 60 --k 10
@@ -143,6 +147,7 @@ python -m app.cli recommend --hashtag "python" --min-rate 0.1
 ```
 
 #### Comment Analysis
+
 ```bash
 # Analyze comment thread depths
 python -m app.cli comment-depths
@@ -152,6 +157,7 @@ python -m app.cli viral-chains --min-depth 5 --min-engagement 100
 ```
 
 #### Engagement Reports
+
 ```bash
 # Top 10 most engaged users
 python -m app.cli top-users --limit 10
@@ -166,11 +172,13 @@ python -m app.cli fastest-growing --hours 24 --limit 15
 ### API Examples
 
 #### Health Check
+
 ```bash
 curl -X GET "http://localhost:8000/health"
 ```
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -181,20 +189,22 @@ curl -X GET "http://localhost:8000/health"
 ```
 
 #### Trending Hashtags
+
 ```bash
 # Get trending hashtags
 curl -X GET "http://localhost:8000/hashtags/trending?window_minutes=60&k=5"
 ```
 
 **Response:**
+
 ```json
 {
   "hashtags": [
-    {"hashtag": "python", "count": 145},
-    {"hashtag": "datascience", "count": 89},
-    {"hashtag": "ai", "count": 67},
-    {"hashtag": "machinelearning", "count": 54},
-    {"hashtag": "tech", "count": 42}
+    { "hashtag": "python", "count": 145 },
+    { "hashtag": "datascience", "count": 89 },
+    { "hashtag": "ai", "count": 67 },
+    { "hashtag": "machinelearning", "count": 54 },
+    { "hashtag": "tech", "count": 42 }
   ],
   "window_minutes": 60,
   "total_count": 5
@@ -202,24 +212,27 @@ curl -X GET "http://localhost:8000/hashtags/trending?window_minutes=60&k=5"
 ```
 
 #### Hashtag Recommendations
+
 ```bash
 curl -X GET "http://localhost:8000/hashtags/recommendations?target_hashtag=python&min_cooccurrence_rate=0.1"
 ```
 
 **Response:**
+
 ```json
 {
   "target_hashtag": "python",
   "recommendations": [
-    {"hashtag": "programming", "cooccurrence_rate": 0.85},
-    {"hashtag": "coding", "cooccurrence_rate": 0.72},
-    {"hashtag": "developer", "cooccurrence_rate": 0.45}
+    { "hashtag": "programming", "cooccurrence_rate": 0.85 },
+    { "hashtag": "coding", "cooccurrence_rate": 0.72 },
+    { "hashtag": "developer", "cooccurrence_rate": 0.45 }
   ],
   "min_cooccurrence_rate": 0.1
 }
 ```
 
 #### Comment Analysis
+
 ```bash
 # Get comment depth analysis
 curl -X GET "http://localhost:8000/comments/depth-analysis"
@@ -229,6 +242,7 @@ curl -X GET "http://localhost:8000/comments/viral-chains?min_depth=3&min_engagem
 ```
 
 #### Engagement Reports
+
 ```bash
 # Get top engaged users
 curl -X GET "http://localhost:8000/reports/top-users?limit=10"
@@ -241,6 +255,7 @@ curl -X GET "http://localhost:8000/reports/fastest-growing?hours=24&limit=15"
 ```
 
 **Top Users Response:**
+
 ```json
 {
   "users": [
@@ -264,8 +279,9 @@ curl -X GET "http://localhost:8000/reports/fastest-growing?hours=24&limit=15"
 The platform includes comprehensive database indexing for optimal query performance:
 
 #### Indexes Added
+
 - **`posts(user_id, created_at)`** - Composite index for user timeline queries
-- **`engagements(user_id, created_at)`** - User engagement history lookups  
+- **`engagements(user_id, created_at)`** - User engagement history lookups
 - **`post_hashtags(hashtag_id, post_id)`** - Hashtag trending analysis
 - **`post_hashtags(post_id)`** - Post hashtag lookups
 - **`comments(parent_id)`** - Comment threading and depth traversal
@@ -274,29 +290,32 @@ The platform includes comprehensive database indexing for optimal query performa
 #### Optimized Query Patterns
 
 1. **User Timeline Queries**
+
    ```sql
-   SELECT * FROM posts 
+   SELECT * FROM posts
    WHERE user_id = ? AND created_at >= ?
    ORDER BY created_at DESC;
    ```
 
 2. **Trending Analysis**
+
    ```sql
    SELECT h.name, COUNT(*) as count
-   FROM hashtags h 
-   JOIN post_hashtags ph ON h.id = ph.hashtag_id 
-   JOIN posts p ON ph.post_id = p.id 
+   FROM hashtags h
+   JOIN post_hashtags ph ON h.id = ph.hashtag_id
+   JOIN posts p ON ph.post_id = p.id
    WHERE p.created_at >= NOW() - INTERVAL '1 hour'
-   GROUP BY h.id, h.name 
+   GROUP BY h.id, h.name
    ORDER BY count DESC;
    ```
 
 3. **User Engagement Reports**
+
    ```sql
    SELECT user_id, COUNT(*) as engagement_count
-   FROM engagements 
-   WHERE created_at >= ? 
-   GROUP BY user_id 
+   FROM engagements
+   WHERE created_at >= ?
+   GROUP BY user_id
    ORDER BY engagement_count DESC;
    ```
 
@@ -305,7 +324,7 @@ The platform includes comprehensive database indexing for optimal query performa
    WITH RECURSIVE comment_tree AS (
      SELECT id, parent_id, 1 as depth FROM comments WHERE parent_id IS NULL
      UNION ALL
-     SELECT c.id, c.parent_id, ct.depth + 1 
+     SELECT c.id, c.parent_id, ct.depth + 1
      FROM comments c JOIN comment_tree ct ON c.parent_id = ct.id
    )
    SELECT depth, COUNT(*) FROM comment_tree GROUP BY depth;
@@ -320,23 +339,24 @@ To validate query performance improvements, run:
 psql $DATABASE_URL
 
 # Run EXPLAIN ANALYZE on heavy queries
-EXPLAIN ANALYZE 
-SELECT COUNT(*) FROM posts 
-WHERE user_id BETWEEN 1 AND 100 
+EXPLAIN ANALYZE
+SELECT COUNT(*) FROM posts
+WHERE user_id BETWEEN 1 AND 100
 AND created_at >= NOW() - INTERVAL '7 days';
 
 EXPLAIN ANALYZE
 SELECT h.name, COUNT(*) as post_count
-FROM hashtags h 
-JOIN post_hashtags ph ON h.id = ph.hashtag_id 
-JOIN posts p ON ph.post_id = p.id 
+FROM hashtags h
+JOIN post_hashtags ph ON h.id = ph.hashtag_id
+JOIN posts p ON ph.post_id = p.id
 WHERE p.created_at >= NOW() - INTERVAL '24 hours'
-GROUP BY h.id, h.name 
-ORDER BY post_count DESC 
+GROUP BY h.id, h.name
+ORDER BY post_count DESC
 LIMIT 10;
 ```
 
 #### Expected Improvements
+
 - **User timeline queries**: 70-90% faster with composite `(user_id, created_at)` index
 - **Trending analysis**: 60-80% faster with optimized hashtag joins
 - **Comment threading**: 50-70% faster recursive traversal with `parent_id` index
@@ -359,12 +379,12 @@ pytest tests/test_reports.py
 
 ## 📊 Screenshots
 
-*Screenshots and visual demonstrations would be added here to showcase:*
+_Screenshots and visual demonstrations would be added here to showcase:_
 
-- *Swagger UI documentation interface*
-- *CLI command outputs*
-- *Sample API responses*
-- *Dashboard views (if frontend is implemented)*
+- _Swagger UI documentation interface_
+- _CLI command outputs_
+- _Sample API responses_
+- _Dashboard views (if frontend is implemented)_
 
 ## 🛠️ Development
 
@@ -417,6 +437,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Milestone 7**: Demo polish and comprehensive documentation
 - ✅ **Milestone 8**: Performance optimization with database indexing
 
+## ER DIAGRAM
+
 ---
 
-*Built with ❤️ using FastAPI, SQLAlchemy, PostgreSQL, and Redis*
+_Built with ❤️ using FastAPI, SQLAlchemy, PostgreSQL, and Redis_
