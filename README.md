@@ -438,6 +438,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Milestone 8**: Performance optimization with database indexing
 
 ## ER DIAGRAM
+<img width="1284" height="1098" alt="image" src="https://github.com/user-attachments/assets/324bfc88-9116-4688-b3ea-ccb3346912d1" />
+
 
 ---
 
