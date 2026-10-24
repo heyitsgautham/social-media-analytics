@@ -8,7 +8,7 @@ recommendation engine for co-occurring hashtags.
 import json
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import redis
 from sqlalchemy import func, text
@@ -436,8 +436,9 @@ def populate_trending_from_db(minutes_back: int = 60) -> None:
         minute_hashtag_counts = Counter()
 
         for created_at, hashtag_name in posts_with_hashtags:
-            # Convert to minute timestamp
-            minute_timestamp = int(created_at.timestamp() // 60)
+            # created_at is stored as naive UTC. Calling .timestamp() on a naive value
+            # treats it as local time, which shifts buckets by the host's UTC offset.
+            minute_timestamp = int(created_at.replace(tzinfo=UTC).timestamp() // 60)
             minute_hashtag_counts[(minute_timestamp, hashtag_name)] += 1
 
         # Populate trending engine

@@ -2,6 +2,7 @@
 Tests for trending engine and recommendation system.
 """
 
+import time
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -301,15 +302,37 @@ class TestDatabaseIntegration:
     """Test database integration functions."""
 
     def test_populate_trending_from_db(self, sample_data):
-        """Test populating trending engine from database."""
-        with patch("app.services.trending.get_session") as mock_get_session:
+        """Posts from the last few minutes land in the current window with their counts."""
+        engine = TrendingEngine(window_minutes=60, cache=RedisClient(enabled=False))
+        with (
+            patch("app.services.trending.get_session") as mock_get_session,
+            patch("app.services.trending.trending_engine", engine),
+        ):
             mock_get_session.return_value.__enter__.return_value = sample_data["session"]
 
-            # This should populate the engine with recent hashtag data
-            populate_trending_from_db()
+            populate_trending_from_db(minutes_back=60)
 
-            # The global trending_engine should now have data
-            # Note: This is testing the import behavior, specific counts depend on timing
+        assert engine.get_count("python") == 4
+        assert engine.get_count("fastapi") == 3
+        assert engine.top(k=2) == [("python", 4), ("fastapi", 3)]
+
+    def test_populate_trending_ignores_local_timezone(self, sample_data, monkeypatch):
+        """created_at is naive UTC, so bucketing must not depend on the host timezone."""
+        monkeypatch.setenv("TZ", "Asia/Kolkata")
+        time.tzset()
+        try:
+            engine = TrendingEngine(window_minutes=60, cache=RedisClient(enabled=False))
+            with (
+                patch("app.services.trending.get_session") as mock_get_session,
+                patch("app.services.trending.trending_engine", engine),
+            ):
+                mock_get_session.return_value.__enter__.return_value = sample_data["session"]
+                populate_trending_from_db(minutes_back=60)
+
+            assert engine.get_count("python", window_minutes=10) == 4
+        finally:
+            monkeypatch.delenv("TZ")
+            time.tzset()
 
 
 class TestEdgeCases:
