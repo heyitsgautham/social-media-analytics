@@ -2,13 +2,13 @@
 Health check endpoints for monitoring system status.
 """
 
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.clock import utc_now
 from app.db import get_session
 from app.services.trending import redis_client
 
@@ -92,7 +92,7 @@ async def health_check() -> dict[str, Any]:
         "db": db_health,
         "redis": redis_health,
         "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_now().isoformat(),
     }
 
 
@@ -120,7 +120,7 @@ async def database_health() -> dict[str, Any]:
                         "posts": post_count,
                         "hashtags": hashtag_count,
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": utc_now().isoformat(),
                 }
             )
     except Exception as e:
@@ -161,7 +161,7 @@ async def redis_health() -> dict[str, Any]:
                         "get": retrieved_value == test_value,
                         "delete": delete_success,
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": utc_now().isoformat(),
                 }
             )
         except Exception as e:

@@ -13,6 +13,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.clock import utc_now
+
 
 class Base(DeclarativeBase):
     pass
@@ -22,7 +24,7 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     handle: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
     posts: Mapped[list["Post"]] = relationship(back_populates="user")
 
@@ -34,7 +36,7 @@ class Post(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="posts")
     hashtags: Mapped[list["PostHashtag"]] = relationship(
@@ -84,7 +86,7 @@ class Comment(Base):
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     upvotes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
     post: Mapped[Post] = relationship(back_populates="comments")
     parent: Mapped["Comment | None"] = relationship(
@@ -121,7 +123,7 @@ class Engagement(Base):
     kind: Mapped[EngagementKind] = mapped_column(
         Enum(EngagementKind, name="engagement_kind"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
 
 
 Index("idx_engagements_target", Engagement.target_type, Engagement.target_id, Engagement.created_at)

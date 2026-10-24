@@ -9,13 +9,14 @@ import json
 import logging
 import time
 from collections import Counter, defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 
 import redis
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from app.clock import utc_now
 from app.config import (
     DB_RETRY_ATTEMPTS,
     DB_RETRY_MAX_WAIT,
@@ -435,7 +436,7 @@ def populate_trending_from_db(minutes_back: int = 60) -> None:
     Args:
         minutes_back: How many minutes back to load data
     """
-    cutoff_time = datetime.utcnow() - timedelta(minutes=minutes_back)
+    cutoff_time = utc_now() - timedelta(minutes=minutes_back)
 
     with get_session() as db:
         # Query posts and their hashtags from the last N minutes
@@ -472,7 +473,7 @@ def simulate_realtime_updates() -> None:
     In a real system, this would be triggered by post creation events.
     """
     # Get posts from the last minute
-    one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
+    one_minute_ago = utc_now() - timedelta(minutes=1)
 
     with get_session() as db:
         recent_posts = (

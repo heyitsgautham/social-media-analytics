@@ -1,10 +1,11 @@
 """HTTP tests for the comments, reports and hashtags routes against PostgreSQL."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.clock import utc_now
 from app.db import get_session
 from app.main import app
 from app.models import Comment, Engagement, Hashtag, Post, PostHashtag, User
@@ -26,7 +27,7 @@ def engine(monkeypatch):
 @pytest.fixture
 def data(empty_db):
     """Two users, two posts tagged #python (one also #ai), and a three-deep reply chain."""
-    now = datetime.utcnow()
+    now = utc_now()
     with get_session() as db:
         alice, bob = User(id=1, handle="alice"), User(id=2, handle="bob")
         python, ai = Hashtag(id=1, name="python"), Hashtag(id=2, name="ai")
@@ -129,7 +130,7 @@ class TestReportRoutes:
         assert body["hashtags"] == []
 
     def test_fastest_growing_rates_recent_against_total_posts(self, data):
-        old = datetime.utcnow() - timedelta(days=2)
+        old = utc_now() - timedelta(days=2)
         with get_session() as db:
             for post_id in (10, 11, 12):
                 db.add(Post(id=post_id, user_id=1, content="old", created_at=old))

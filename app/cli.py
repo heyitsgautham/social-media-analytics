@@ -2,6 +2,7 @@
 
 import typer
 
+from app.clock import utc_now
 from app.db import get_session
 from app.logging_config import configure_logging
 from app.services import seeder
@@ -297,9 +298,9 @@ def reports_cmd(
                     typer.echo("\n🏆 No hashtags found")
 
                 # Fastest growing hashtags
-                from datetime import datetime, timedelta
+                from datetime import timedelta
 
-                since = datetime.utcnow() - timedelta(hours=hours)
+                since = utc_now() - timedelta(hours=hours)
                 growing_data = get_fastest_growing_hashtags(db, since=since, limit=limit)
 
                 if growing_data:

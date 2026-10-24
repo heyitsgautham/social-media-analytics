@@ -50,6 +50,8 @@ known-first-party = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# A deprecated call inside app/ fails the test that reaches it.
+filterwarnings = ["error::DeprecationWarning:app"]
 
 [tool.mypy]
 python_version = "3.11"

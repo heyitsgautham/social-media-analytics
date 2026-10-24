@@ -1,11 +1,11 @@
 # tests/test_comments.py
 """Tests for comment analysis service."""
 
-from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
 
+from app.clock import utc_now
 from app.services.comments import (
     CommentAnalyzer,
     CommentDepthAnalysis,
@@ -28,7 +28,7 @@ class MockComment:
         self.post_id = post_id
         self.user_id = user_id
         self.body = f"Comment {id} body"
-        self.created_at = datetime.utcnow()
+        self.created_at = utc_now()
 
 
 class MockPost:
@@ -37,7 +37,7 @@ class MockPost:
     def __init__(self, id: int):
         self.id = id
         self.content = f"Post {id} content"
-        self.created_at = datetime.utcnow()
+        self.created_at = utc_now()
 
 
 class TestCommentAnalyzer:

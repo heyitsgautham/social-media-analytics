@@ -6,6 +6,7 @@ from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from app.clock import utc_now
 from app.config import DB_RETRY_ATTEMPTS, DB_RETRY_MAX_WAIT, DB_RETRY_MIN_WAIT
 from app.models import (
     Comment,
@@ -285,7 +286,7 @@ def insert_engagement_with_transaction(
         target_type=TargetType(target_type),
         target_id=target_id,
         kind=EngagementKind(kind),
-        created_at=datetime.utcnow(),
+        created_at=utc_now(),
     )
     db.add(engagement)
     db.flush()  # Get the ID

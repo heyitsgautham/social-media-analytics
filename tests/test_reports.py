@@ -3,10 +3,11 @@
 Tests for engagement reports functionality.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
+from app.clock import utc_now
 from app.db import get_session
 from app.models import (
     Comment,
@@ -54,7 +55,7 @@ def test_data():
         db.commit()
 
         # Create posts with different timestamps
-        now = datetime.utcnow()
+        now = utc_now()
         post1 = Post(
             id=1, user_id=1, content="Python is great!", created_at=now - timedelta(days=2)
         )
@@ -216,7 +217,7 @@ def test_get_fastest_growing_hashtags(test_data):
     """Test fastest growing hashtags calculation."""
     with get_session() as db:
         # Test with recent time window
-        since = datetime.utcnow() - timedelta(hours=6)
+        since = utc_now() - timedelta(hours=6)
         result = get_fastest_growing_hashtags(db, since=since, limit=10)
 
         # Should only include hashtags with recent activity
@@ -425,7 +426,7 @@ def test_reports_with_no_data():
         hashtags = get_top_hashtags(db, limit=10)
         assert hashtags == []
 
-        since = datetime.utcnow() - timedelta(hours=24)
+        since = utc_now() - timedelta(hours=24)
         growing = get_fastest_growing_hashtags(db, since=since, limit=10)
         assert growing == []
 

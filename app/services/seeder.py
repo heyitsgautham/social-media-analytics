@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import random
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from faker import Faker
 from sqlalchemy.orm import Session
 
+from app.clock import utc_now
 from app.models import (
     Comment,
     Engagement,
@@ -79,7 +80,7 @@ def make_posts(
     for _ in range(n_posts):
         u = random.choice(users)
         # For refresh, create posts at current time to ensure they are in the window
-        created = datetime.utcnow()
+        created = utc_now()
         content = fake.sentence(nb_words=random.randint(8, 20))
         p = Post(user_id=u.id, content=content, created_at=created)
         db.add(p)

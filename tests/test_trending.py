@@ -3,13 +3,14 @@ Tests for trending engine and recommendation system.
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.clock import utc_now
 from app.models import Base, Hashtag, Post, PostHashtag, User
 from app.services.trending import (
     RecommendationEngine,
@@ -72,7 +73,7 @@ def sample_data(in_memory_db):
         session.flush()
 
         # Create posts with different timestamps
-        now = datetime.utcnow()
+        now = utc_now()
         posts = [
             Post(
                 user_id=users[0].id,

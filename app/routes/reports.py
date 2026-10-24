@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.clock import utc_now
 from app.db import get_session
 from app.services.reports import (
     get_fastest_growing_hashtags,
@@ -146,7 +147,7 @@ async def get_fastest_growing_hashtags_endpoint(
     Only includes hashtags with minimum activity thresholds.
     """
     try:
-        since = datetime.utcnow() - timedelta(hours=hours)
+        since = utc_now() - timedelta(hours=hours)
 
         with get_session() as db:
             hashtags_data = get_fastest_growing_hashtags(db, since=since, limit=limit)
