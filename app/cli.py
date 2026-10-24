@@ -3,6 +3,7 @@
 import typer
 
 from app.db import get_session
+from app.logging_config import configure_logging
 from app.services import seeder
 from app.services.comments import analyze_comment_depth, detect_viral_comment_chains
 from app.services.reports import (
@@ -13,6 +14,12 @@ from app.services.reports import (
 from app.services.trending import populate_trending_from_db, recommendation_engine, trending_engine
 
 app = typer.Typer(help="Social Analytics CLI with subcommands")
+
+
+@app.callback()
+def _setup() -> None:
+    # Runs before every subcommand, so service warnings reach stderr as structured logs.
+    configure_logging()
 
 
 @app.command("seed")

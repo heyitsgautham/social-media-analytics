@@ -6,6 +6,7 @@ recommendation engine for co-occurring hashtags.
 """
 
 import json
+import logging
 import time
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
@@ -25,6 +26,8 @@ from app.config import (
 )
 from app.db import get_session
 from app.models import Hashtag, Post, PostHashtag
+
+logger = logging.getLogger(__name__)
 
 
 class RedisClient:
@@ -53,7 +56,10 @@ class RedisClient:
             # Test connection
             self._client.ping()
         except Exception as e:
-            print(f"Redis connection failed: {e}. Falling back to in-memory only.")
+            logger.warning(
+                "Redis connection failed, falling back to in-memory only",
+                extra={"error": str(e)},
+            )
             self._client = None
 
     @property
@@ -75,7 +81,7 @@ class RedisClient:
             value = client.get(key)
             return None if value is None else str(value)
         except Exception as e:
-            print(f"Redis GET error for key {key}: {e}")
+            logger.warning("Redis GET failed", extra={"key": key, "error": str(e)})
             return None
 
     def set(self, key: str, value: str, ttl: int) -> bool:
@@ -88,7 +94,7 @@ class RedisClient:
             client.setex(key, ttl, value)
             return True
         except Exception as e:
-            print(f"Redis SET error for key {key}: {e}")
+            logger.warning("Redis SET failed", extra={"key": key, "error": str(e)})
             return False
 
     def delete(self, key: str) -> bool:
@@ -101,7 +107,7 @@ class RedisClient:
             client.delete(key)
             return True
         except Exception as e:
-            print(f"Redis DELETE error for key {key}: {e}")
+            logger.warning("Redis DELETE failed", extra={"key": key, "error": str(e)})
             return False
 
     def ping(self) -> bool:

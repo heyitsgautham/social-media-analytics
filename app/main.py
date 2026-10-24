@@ -2,17 +2,22 @@
 Main FastAPI application for Social Media Analytics Platform.
 """
 
-import traceback
+import logging
+import time
+from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.logging_config import configure_logging
 from app.routes.comments import router as comments_router
 from app.routes.hashtags import router as hashtags_router
 from app.routes.health import router as health_router
 from app.routes.reports import router as reports_router
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -22,6 +27,8 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI app instance
     """
+    configure_logging()
+
     app = FastAPI(
         title="Social Media Analytics API",
         description="Real-time hashtag trending and engagement analytics platform",
@@ -39,10 +46,33 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def log_requests(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Log one line per request with its status and duration."""
+        start = time.perf_counter()
+        response = await call_next(request)
+        logger.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+            },
+        )
+        return response
+
     # Global exception handlers
     @app.exception_handler(SQLAlchemyError)
     async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
         """Handle SQLAlchemy database errors."""
+        logger.error(
+            "database error",
+            exc_info=exc,
+            extra={"method": request.method, "path": request.url.path},
+        )
         return JSONResponse(
             status_code=500,
             content={
@@ -55,9 +85,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         """Handle all other unhandled exceptions."""
-        # Log the full traceback for debugging
-        error_traceback = traceback.format_exc()
-        print(f"Unhandled exception: {error_traceback}")
+        logger.error(
+            "unhandled exception",
+            exc_info=exc,
+            extra={"method": request.method, "path": request.url.path},
+        )
 
         return JSONResponse(
             status_code=500,
