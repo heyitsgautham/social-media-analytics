@@ -12,7 +12,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import get_session
 from app.models import Base, Hashtag, Post, PostHashtag, User
-from app.services.trending import RecommendationEngine, TrendingEngine, populate_trending_from_db
+from app.services.trending import (
+    RecommendationEngine,
+    RedisClient,
+    TrendingEngine,
+    populate_trending_from_db,
+)
 
 
 # Test fixtures
@@ -30,8 +35,8 @@ def in_memory_db():
 
 @pytest.fixture
 def trending_engine():
-    """Create fresh trending engine for each test."""
-    return TrendingEngine(window_minutes=60)
+    """Create a fresh trending engine with caching off, so tests never share cached results."""
+    return TrendingEngine(window_minutes=60, cache=RedisClient(enabled=False))
 
 
 @pytest.fixture
@@ -357,6 +362,37 @@ class TestEdgeCases:
         hashtag_names = [name for name, count in result]
         assert "🐍python" in hashtag_names
         assert "café" in hashtag_names
+
+
+class TestCacheIsolation:
+    """The engine reads and writes cache entries only through its own client."""
+
+    def test_engine_uses_injected_cache(self):
+        cache = RedisClient(enabled=False)
+        engine = TrendingEngine(window_minutes=60, cache=cache)
+        assert engine.cache is cache
+
+    def test_engine_defaults_to_shared_client(self):
+        from app.services.trending import redis_client
+
+        assert TrendingEngine().cache is redis_client
+
+    def test_stale_cache_entry_from_other_engine_is_not_read(self):
+        """A disabled cache returns fresh results even if another engine cached the same key."""
+        first = TrendingEngine(window_minutes=60, cache=RedisClient(enabled=False))
+        first.increment("old", 5)
+        assert first.top(k=1) == [("old", 5)]
+
+        second = TrendingEngine(window_minutes=60, cache=RedisClient(enabled=False))
+        second.increment("new", 1)
+        assert second.top(k=1) == [("new", 1)]
+
+    def test_disabled_client_reports_unavailable(self):
+        cache = RedisClient(enabled=False)
+        assert cache.is_available is False
+        assert cache.get("any") is None
+        assert cache.set("any", "v", 10) is False
+        assert cache.delete("any") is False
 
 
 class TestConcurrency:

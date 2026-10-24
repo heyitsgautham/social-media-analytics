@@ -31,10 +31,17 @@ from app.models import Hashtag, Post, PostHashtag
 class RedisClient:
     """Redis client wrapper with connection handling and failover."""
 
-    def __init__(self):
-        """Initialize Redis client."""
+    def __init__(self, enabled: Optional[bool] = None, url: Optional[str] = None):
+        """
+        Initialize Redis client.
+
+        Args:
+            enabled: Whether caching is on. Defaults to ENABLE_REDIS_CACHE.
+            url: Redis connection URL. Defaults to REDIS_URL.
+        """
         self._client: Optional[redis.Redis] = None
-        self._enabled = ENABLE_REDIS_CACHE
+        self._enabled = ENABLE_REDIS_CACHE if enabled is None else enabled
+        self._url = REDIS_URL if url is None else url
         self._initialize_client()
 
     def _initialize_client(self) -> None:
@@ -43,7 +50,7 @@ class RedisClient:
             return
 
         try:
-            self._client = redis.from_url(REDIS_URL, decode_responses=True)
+            self._client = redis.from_url(self._url, decode_responses=True)
             # Test connection
             self._client.ping()
         except Exception as e:
@@ -114,14 +121,16 @@ class TrendingEngine:
     Provides top(k, window=W) API and hashtag recommendations.
     """
 
-    def __init__(self, window_minutes: int = 60):
+    def __init__(self, window_minutes: int = 60, cache: Optional[RedisClient] = None):
         """
         Initialize trending engine.
 
         Args:
             window_minutes: Size of sliding window in minutes (default: 60)
+            cache: Cache client for top-k results. Defaults to the shared redis_client.
         """
         self.window_minutes = window_minutes
+        self.cache = cache if cache is not None else redis_client
         # Structure: {hashtag_name: {minute_timestamp: count}}
         self.counters: Dict[str, Dict[int, int]] = defaultdict(lambda: defaultdict(int))
         self._last_cleanup = int(time.time() // 60)
@@ -214,7 +223,7 @@ class TrendingEngine:
 
         # Try to get from cache first
         cache_key = f"cache:trending:{window}:{k}"
-        cached_result = redis_client.get(cache_key)
+        cached_result = self.cache.get(cache_key)
 
         if cached_result:
             try:
@@ -229,10 +238,10 @@ class TrendingEngine:
         result = self._compute_top(k, window)
 
         # Cache the result if Redis is available
-        if redis_client.is_available and result:
+        if self.cache.is_available and result:
             cache_data = [{"hashtag": hashtag, "count": count} for hashtag, count in result]
             cache_value = json.dumps(cache_data)
-            redis_client.set(cache_key, cache_value, TRENDING_TTL_SECONDS)
+            self.cache.set(cache_key, cache_value, TRENDING_TTL_SECONDS)
 
         return result
 
@@ -277,7 +286,7 @@ class TrendingEngine:
         """
         window = window_minutes if window_minutes is not None else self.window_minutes
         cache_key = f"cache:trending:{window}:{k}"
-        return redis_client.delete(cache_key)
+        return self.cache.delete(cache_key)
 
     def get_status(self) -> Dict[str, int]:
         """
