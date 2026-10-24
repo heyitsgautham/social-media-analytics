@@ -1,382 +1,174 @@
-# Social Media Analytics Platform - Demo Script
+# Demo script
 
-**Estimated Time**: 5 minutes  
-**Purpose**: Demonstrate core features and capabilities of the platform
+A five minute walk through the CLI and the HTTP API on seeded data.
+Every output below comes from one real run with `--seed 1337` on an empty database.
+Row IDs, timestamps and engagement totals will differ on your machine.
 
----
+## Before you start
 
-## 🎬 Demo Overview
-
-This demo showcases:
-1. Database seeding with realistic data
-2. CLI-based analytics commands
-3. REST API endpoints
-4. Real-time trending analysis
-5. Comment depth analysis
-6. Engagement reporting
-
----
-
-## 📋 Pre-Demo Setup
-
-### 1. Environment Check
-```bash
-# Verify Python environment
-python --version  # Should be 3.11+
-
-# Check if virtual environment is active
-which python
-
-# Verify dependencies
-pip list | grep -E "(fastapi|sqlalchemy|typer|redis)"
-```
-
-### 2. Database Connection
-```bash
-# Test database connection
-python -c "from app.db import get_session; print('Database: OK')"
-
-# Check migration status
-alembic current
-alembic heads
-```
-
-### 3. Optional: Start Redis (for caching demo)
-```bash
-# If Redis is available
-redis-server --daemonize yes
-redis-cli ping  # Should return "PONG"
-```
-
----
-
-## 🚀 Demo Script
-
-### Step 1: Database Seeding (1 minute)
+Follow "Install for development" and "Configure" in the [README](README.md), or run `docker compose up --build` and prefix each CLI command with `docker compose exec api`.
+Set `LOG_FORMAT=text` if you want readable log lines in the terminal.
 
 ```bash
-# Clear any existing data (optional)
-# python -c "from app.db import engine; from app.models import Base; Base.metadata.drop_all(engine); Base.metadata.create_all(engine)"
-
-# Seed database with sample data
-echo "🌱 Seeding database with sample data..."
-python -m app.cli seed --users 500 --posts 2000 --hashtags 100
-
-# Verify seeding
-python -c "
-from app.db import get_session
-from app.models import User, Post, Hashtag, Comment, Engagement
-with get_session() as db:
-    print(f'Users: {db.query(User).count()}')
-    print(f'Posts: {db.query(Post).count()}')
-    print(f'Hashtags: {db.query(Hashtag).count()}')
-    print(f'Comments: {db.query(Comment).count()}')
-    print(f'Engagements: {db.query(Engagement).count()}')
-"
+uv run alembic upgrade head
 ```
 
-**Expected Output:**
-```
-🌱 Seeding database with sample data...
-Seed complete: users=500, posts=2000, hashtags=100
-Users: 500
-Posts: 2000
-Hashtags: 100
-Comments: ~1200
-Engagements: ~4000
-```
+## 1. Seed the database
 
-### Step 2: CLI Analytics Demo (2 minutes)
-
-#### Trending Hashtags Analysis
 ```bash
-echo "📈 Getting trending hashtags..."
-python -m app.cli trending --window 60 --k 10
-
-echo "📈 Syncing with database and showing trending..."
-python -m app.cli trending --sync --sync-minutes 120 --k 5
+uv run python -m app.cli seed --users 200 --posts 1000 --hashtags 50 --seed 1337
 ```
 
-**Expected Output:**
 ```
-📈 Getting trending hashtags...
-Top 5 trending hashtags (60-minute window):
-1. #python (45 mentions)
-2. #tech (38 mentions)
-3. #ai (32 mentions)
-4. #coding (28 mentions)
-5. #data (24 mentions)
+Seed complete: users=200, posts=1000, hashtags=50
 ```
 
-#### Comment Analysis
+The seeder stamps every post with the current time, so the next step finds data in the last hour.
+
+## 2. Trending hashtags
+
 ```bash
-echo "🔍 Analyzing comment thread depths..."
-python -m app.cli comment-depths
-
-echo "🔍 Detecting viral comment chains..."
-python -m app.cli viral-chains --min-depth 3 --min-engagement 50
+uv run python -m app.cli trending --sync --k 5
 ```
 
-**Expected Output:**
 ```
-🔍 Analyzing comment thread depths...
-Comment Depth Analysis:
-- Depth 1: 450 comments
-- Depth 2: 180 comments  
-- Depth 3: 45 comments
-- Depth 4+: 12 comments
-Maximum depth: 6
+Syncing trending data from last 60 minutes...
+✓ Sync complete
 
-🔍 Detecting viral comment chains...
-Found 3 viral comment chains:
-- Chain 1: Post #123, 5 levels deep, 847 total engagement
-- Chain 2: Post #456, 4 levels deep, 523 total engagement
+🔥 Top 5 trending hashtags (last 60 minutes):
+──────────────────────────────────────────────────
+ 1. #ai                   (176 posts)
+ 2. #travel               (174 posts)
+ 3. #news                 (169 posts)
+ 4. #sports               (163 posts)
+ 5. #python               (155 posts)
+
+Total hashtags tracked: 50
 ```
 
-#### Engagement Reports
+The seeder gives `ai`, `python`, `news`, `sports` and `travel` five times the weight of other tags, which is why they lead.
+
+`recommend` lists hashtags that appear on at least 30 percent of a tag's posts.
+Seeded tags are spread across 50 names, so none clear that bar and the command says so.
+
 ```bash
-echo "👥 Top engaged users..."
-python -m app.cli top-users --limit 5
-
-echo "🏷️ Top hashtags by usage..."
-python -m app.cli top-hashtags --limit 10
-
-echo "🚀 Fastest growing hashtags..."
-python -m app.cli fastest-growing --hours 24 --limit 5
+uv run python -m app.cli recommend ai
 ```
 
-### Step 3: REST API Demo (2 minutes)
+```
+No recommendations found for #ai
+This could mean:
+• The hashtag doesn't exist in the database
+• No other hashtags co-occur ≥30% of the time
+```
 
-#### Start the API Server
+## 3. Comment threads
+
+Pick the post with the most replies.
+
 ```bash
-echo "🌐 Starting FastAPI server..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-SERVER_PID=$!
-
-# Wait for server to start
-sleep 3
-
-# Test server is running
-curl -s http://localhost:8000/health | python -m json.tool
+psql "${DATABASE_URL/+psycopg2/}" -Atc \
+  "select post_id from comments where parent_id is not null group by post_id order by count(*) desc limit 1"
 ```
 
-#### Health Check
+Then analyze it, using the ID that query printed.
+
 ```bash
-echo "💓 Health check..."
-curl -s "http://localhost:8000/health" | python -m json.tool
+uv run python -m app.cli comments depth --post 2682
+uv run python -m app.cli comments viral --post 2682
 ```
 
-**Expected Output:**
+```
+📊 Comment Depth Analysis for Post 2682:
+──────────────────────────────────────────────────
+Max depth:              3
+Total comments:         14
+Total replies:          11
+Avg replies/comment:    0.79
+
+💬 Comments have 3 levels of nesting
+
+🔥 Viral Chain Analysis for Post 2682:
+──────────────────────────────────────────────────
+Longest chain length:   3
+Total viral chains:     5
+Viral criteria met:     ✓
+
+Viral criteria: ≥3 replies OR ≥10 upvotes per comment
+
+🏆 Longest viral chain (comments):
+  1. Comment #5339
+  2. Comment #5340
+  3. Comment #5341
+```
+
+## 4. Engagement reports
+
+```bash
+uv run python -m app.cli reports users --limit 3
+```
+
+```
+👥 Top 3 Most Engaged Users:
+────────────────────────────────────────────────────────────────────────────────
+#   Handle               Total    Posts    Comments P Count  C Count
+────────────────────────────────────────────────────────────────────────────────
+1   @amanda49            519      519      0        9        19
+2   @adriennejohnson     495      495      0        11       17
+3   @janetmartin         495      495      0        10       16
+────────────────────────────────────────────────────────────────────────────────
+Total engagements: 1,509
+Average per user:  503.0
+```
+
+The seeder only creates engagements on posts, so the comment engagement column stays at 0.
+
+```bash
+uv run python -m app.cli reports hashtags --limit 3
+```
+
+This prints the top hashtags by distinct users, then the fastest growing ones.
+Right after seeding every post is recent, so every growth rate is 100 percent.
+
+## 5. The HTTP API
+
+```bash
+uv run uvicorn app.main:app
+```
+
+In a second terminal:
+
+```bash
+curl -s http://localhost:8000/health/
+curl -s -X POST http://localhost:8000/hashtags/sync
+curl -s "http://localhost:8000/hashtags/trending?window=60&k=3"
+```
+
 ```json
-{
-  "status": "healthy",
-  "timestamp": "2025-09-20T10:30:00Z",
-  "database": "connected",
-  "cache": "connected"
-}
+{"status":"ok","db":{"status":"ok"},"redis":{"status":"ok"},"version":"1.0.0","timestamp":"2026-10-24T21:15:00.382922"}
+{"message":"Successfully synced trending data from last 60 minutes","minutes_back":60,"status":"success"}
+{"hashtags":[{"hashtag":"ai","count":176},{"hashtag":"travel","count":174},{"hashtag":"news","count":169}],"window_minutes":60,"total_count":3}
 ```
 
-#### Trending Hashtags API
+The API process has its own trending engine, separate from the CLI's, which is why it needs its own sync.
+
+The remaining endpoints are listed in the README, and http://localhost:8000/docs lets you call each one from the browser.
+
 ```bash
-echo "📈 API: Getting trending hashtags..."
-curl -s "http://localhost:8000/hashtags/trending?window_minutes=60&k=5" | python -m json.tool
+curl -s http://localhost:8000/comments/tree/2682
+curl -s "http://localhost:8000/reports/most-engaged-users?limit=3"
+curl -s "http://localhost:8000/reports/fastest-growing-hashtags?hours=24&limit=3"
 ```
 
-**Expected Output:**
-```json
-{
-  "hashtags": [
-    {"hashtag": "python", "count": 45},
-    {"hashtag": "tech", "count": 38},
-    {"hashtag": "ai", "count": 32},
-    {"hashtag": "coding", "count": 28},
-    {"hashtag": "data", "count": 24}
-  ],
-  "window_minutes": 60,
-  "total_count": 5
-}
-```
+## 6. Keep the window fresh
 
-#### Hashtag Recommendations API
+Posts age out of the 60 minute window.
+`refresh` adds new posts for the existing users and hashtags.
+
 ```bash
-echo "🎯 API: Getting hashtag recommendations..."
-curl -s "http://localhost:8000/hashtags/recommendations?target_hashtag=python&min_cooccurrence_rate=0.1" | python -m json.tool
+uv run python -m app.cli refresh --posts 100
 ```
 
-**Expected Output:**
-```json
-{
-  "target_hashtag": "python",
-  "recommendations": [
-    {"hashtag": "programming", "cooccurrence_rate": 0.75},
-    {"hashtag": "coding", "cooccurrence_rate": 0.68},
-    {"hashtag": "developer", "cooccurrence_rate": 0.45}
-  ],
-  "min_cooccurrence_rate": 0.1
-}
 ```
-
-#### Comment Analysis API
-```bash
-echo "🔍 API: Comment depth analysis..."
-curl -s "http://localhost:8000/comments/depth-analysis" | python -m json.tool
-
-echo "🔍 API: Viral comment chains..."
-curl -s "http://localhost:8000/comments/viral-chains?min_depth=3&min_engagement=50" | python -m json.tool
+✅ Added 100 fresh posts to keep data current
 ```
-
-#### Engagement Reports API
-```bash
-echo "👥 API: Top engaged users..."
-curl -s "http://localhost:8000/reports/top-users?limit=5" | python -m json.tool
-
-echo "🏷️ API: Top hashtags..."
-curl -s "http://localhost:8000/reports/top-hashtags?limit=10" | python -m json.tool
-
-echo "🚀 API: Fastest growing hashtags..."
-curl -s "http://localhost:8000/reports/fastest-growing?hours=24&limit=5" | python -m json.tool
-```
-
-**Top Users Expected Output:**
-```json
-{
-  "users": [
-    {
-      "user_id": 42,
-      "username": "alice_data",
-      "total_engagement": 1250,
-      "post_count": 34,
-      "avg_engagement_per_post": 36.76
-    },
-    {
-      "user_id": 157,
-      "username": "bob_analytics",
-      "total_engagement": 980,
-      "post_count": 28,
-      "avg_engagement_per_post": 35.0
-    }
-  ],
-  "limit": 5,
-  "total_count": 2
-}
-```
-
-#### Trending Engine Status
-```bash
-echo "⚙️ API: Engine status..."
-curl -s "http://localhost:8000/hashtags/status" | python -m json.tool
-```
-
-**Expected Output:**
-```json
-{
-  "total_hashtags": 100,
-  "total_buckets": 1440,
-  "cache_size_mb": 2.5,
-  "oldest_bucket_age_minutes": 60
-}
-```
-
-### Step 4: Interactive Demo (Optional)
-
-#### Open Swagger UI
-```bash
-echo "📖 Opening API documentation..."
-echo "Visit: http://localhost:8000/docs"
-echo "Alternative: http://localhost:8000/redoc"
-```
-
-#### Test Custom Queries
-```bash
-# Try different window sizes
-curl -s "http://localhost:8000/hashtags/trending?window_minutes=30&k=3" | python -m json.tool
-
-# Test different recommendation thresholds
-curl -s "http://localhost:8000/hashtags/recommendations?target_hashtag=ai&min_cooccurrence_rate=0.2" | python -m json.tool
-```
-
-### Step 5: Cleanup
-```bash
-echo "🧹 Stopping demo server..."
-kill $SERVER_PID 2>/dev/null || true
-
-echo "🧹 Demo completed successfully!"
-```
-
----
-
-## 🎯 Demo Talking Points
-
-### Architecture Highlights
-- **Microservices**: Separate concerns (trending, comments, reports)
-- **Caching**: Redis for high-performance trending data
-- **Fault Tolerance**: Retry mechanisms and graceful degradation
-- **Type Safety**: Pydantic models and SQLAlchemy typing
-
-### Performance Features
-- **Sliding Window**: Efficient hashtag counting with time windows
-- **Bulk Operations**: Optimized database seeding and queries
-- **Connection Pooling**: SQLAlchemy session management
-- **TTL Caching**: Configurable cache expiration
-
-### Scalability Considerations
-- **Horizontal Scaling**: Stateless API design
-- **Database Optimization**: Proper indexing and query optimization
-- **Cache Strategy**: Redis clustering support
-- **Monitoring**: Health checks and status endpoints
-
-### Production Readiness
-- **Error Handling**: Comprehensive exception management
-- **Logging**: Structured logging (can be enhanced)
-- **Configuration**: Environment-based settings
-- **Testing**: Comprehensive test suite with pytest
-
----
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Error**
-   ```bash
-   # Check DATABASE_URL in .env
-   echo $DATABASE_URL
-   # Test connection
-   psql $DATABASE_URL -c "SELECT version();"
-   ```
-
-2. **Redis Connection Error**
-   ```bash
-   # Check if Redis is running
-   redis-cli ping
-   # Or disable Redis caching
-   export ENABLE_REDIS_CACHE=false
-   ```
-
-3. **Port Already in Use**
-   ```bash
-   # Use different port
-   uvicorn app.main:app --port 8001
-   ```
-
-4. **Import Errors**
-   ```bash
-   # Ensure PYTHONPATH is set
-   export PYTHONPATH=.
-   # Or use module execution
-   python -m app.cli --help
-   ```
-
----
-
-## 📊 Demo Success Metrics
-
-- ✅ Database seeded with 500+ users, 2000+ posts
-- ✅ CLI commands execute without errors
-- ✅ API endpoints return valid JSON responses
-- ✅ Trending analysis shows reasonable results
-- ✅ Comment analysis detects thread structures
-- ✅ Reports generate engagement statistics
-- ✅ Health checks pass for all components
-
-*Demo completed in under 5 minutes with comprehensive feature coverage!*

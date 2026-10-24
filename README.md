@@ -1,446 +1,230 @@
-# 📊 Social Media Analytics Platform
+# Social media analytics
 
-A real-time social media analytics platform that processes user engagement data, provides trending hashtag insights, and scales efficiently using modern backend technologies.
+A FastAPI service and a Typer CLI that analyze a social media dataset stored in PostgreSQL.
+It ranks trending hashtags over a sliding time window, recommends hashtags that co-occur with a given one, walks nested comment threads, and builds engagement reports with SQL joins.
+Redis caches the trending results when it is enabled.
 
-## 🎯 Purpose
+[![CI](https://github.com/heyitsgautham/social-media-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/heyitsgautham/social-media-analytics/actions/workflows/ci.yml)
 
-This platform demonstrates end-to-end engineering workflows with a focus on:
+## Requirements
 
-- **Real-time analytics**: Trending hashtag detection with sliding window counters
-- **Deep insights**: Comment thread analysis and viral chain detection
-- **Engagement reports**: Complex SQL aggregations for user and content analytics
-- **Scalable architecture**: Redis caching, retry mechanisms, and fault tolerance
-- **Production-ready**: FastAPI + SQLAlchemy + Alembic + comprehensive testing
+| Tool | Version |
+|---|---|
+| Python | 3.11 or newer |
+| PostgreSQL | 16 is what CI runs |
+| Redis | 7, optional |
+| [uv](https://docs.astral.sh/uv/) | any recent release, for the locked install |
 
-## 🏗️ Architecture
+Docker with Compose replaces all of the above if you only want to run the API.
 
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│   FastAPI App   │      │    Typer CLI    │      │   PostgreSQL    │
-│                 │      │                 │      │                 │
-│ • REST API      │      │ • Seeding       │      │ • User data     │
-│ • Health checks │      │ • Analytics     │      │ • Posts         │
-│ • CORS enabled  │      │ • Reports       │      │ • Comments      │
-└─────────┬───────┘      └─────────┬───────┘      │ • Hashtags      │
-          │                        |              └─────────┬───────┘
-          |                        |                        |
-          │                        |                        |
-          └────────────────────────┴────────────────────────┘
-                                   │
-                                   │
-                        ┌──────────────────────┐
-                        │      Redis Cache     │
-                        │                      │
-                        │ • Trending data      │
-                        │ • Sliding window     │
-                        │ • TTL caching        │
-                        └──────────────────────┘
+## Quick start with Docker
+
+```bash
+docker compose up --build
 ```
 
-### Core Components
+Compose starts PostgreSQL, Redis and the API.
+The API container applies the Alembic migrations before it starts serving on http://localhost:8000.
+The database starts empty, so seed it from inside the container.
 
-- **Services Layer**: Business logic for trending analysis, comment processing, and reporting
-- **Routes Layer**: FastAPI endpoints providing REST API access
-- **CLI Layer**: Typer-based command-line interface for administration and analytics
-- **Data Layer**: SQLAlchemy ORM models with Alembic migrations
-- **Cache Layer**: Redis for high-performance trending data with configurable TTL
+```bash
+docker compose exec api python -m app.cli seed --users 200 --posts 1000 --hashtags 50
+```
 
-## 🚀 Setup Instructions
-
-### Prerequisites
-
-- Python 3.11+
-- PostgreSQL 12+
-- Redis (optional, for caching)
-
-### 1. Clone Repository
+## Install for development
 
 ```bash
 git clone https://github.com/heyitsgautham/social-media-analytics.git
 cd social-media-analytics
+uv sync --frozen
 ```
 
-### 2. Install Dependencies
+`uv sync --frozen` installs the exact versions in `uv.lock` into `.venv`, including the dev tools.
+Without uv, `pip install -r requirements.txt -r requirements-dev.txt` installs the same pinned versions.
+Both requirements files come from `uv export`, so regenerate them after any change to `uv.lock`.
+
+## Configure
+
+Copy the example file and edit it.
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+cp .env.example .env
 ```
 
-### 3. Configure Environment
+`app/config.py` loads `.env` at import time.
+Every variable is optional.
 
-Create a `.env` file in the project root:
+| Variable | Default | What it controls |
+|---|---|---|
+| `DATABASE_URL` | `postgresql+psycopg2://app:app@localhost:5432/appdb` | PostgreSQL connection for the app and for Alembic |
+| `ENABLE_REDIS_CACHE` | `false` | Caches top-k trending results in Redis when `true` |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
+| `TRENDING_TTL_SECONDS` | `60` | Lifetime of a cached trending result |
+| `DB_RETRY_ATTEMPTS` | `3` | Attempts for report and trending queries |
+| `DB_RETRY_MIN_WAIT` | `1` | Shortest backoff between attempts, in seconds |
+| `DB_RETRY_MAX_WAIT` | `10` | Longest backoff between attempts, in seconds |
+| `LOG_LEVEL` | `INFO` | Level for the `app` logger |
+| `LOG_FORMAT` | `json` | `json` writes one object per line to stderr, `text` writes plain lines |
 
-```env
-# Database (required)
-DATABASE_URL=postgresql+psycopg2://username:password@localhost:5432/social_analytics
+## Run
 
-# Redis Cache (optional)
-ENABLE_REDIS_CACHE=true
-REDIS_URL=redis://localhost:6379/0
-TRENDING_TTL_SECONDS=60
-
-# Retry Configuration (optional)
-DB_RETRY_ATTEMPTS=3
-DB_RETRY_MIN_WAIT=1
-DB_RETRY_MAX_WAIT=10
-```
-
-### 4. Set Up Database
+Create the schema, load sample data, then start the API.
 
 ```bash
-# Run migrations
-alembic upgrade head
-
-# Seed database with sample data (deterministic generation for reproducible demos)
-python -m app.cli seed --users 1000 --posts 10000 --hashtags 150
+uv run alembic upgrade head
+uv run python -m app.cli seed --users 200 --posts 1000 --hashtags 50
+uv run uvicorn app.main:app --reload
 ```
 
-### 5. Run Application
+`seed` uses a new random seed on every run.
+Pass `--seed 1337` to get the same users, hashtags and posts each time on an empty database.
+Posts carry the current time, so the trending window has data right after seeding.
+`refresh --posts 100` adds more posts later to keep the window full.
+
+Interactive API docs are at http://localhost:8000/docs.
+
+### HTTP API
+
+| Method and path | Returns |
+|---|---|
+| `GET /health/` | `ok`, `degraded` (Redis down) or `down` (database down), with detail per service |
+| `GET /health/db` | Database status plus row counts for users, posts and hashtags |
+| `GET /health/redis` | Redis status plus a set, get and delete round trip |
+| `GET /hashtags/trending?window=60&k=10` | Top `k` hashtags in the last `window` minutes |
+| `POST /hashtags/sync?minutes_back=60` | Loads recent posts from PostgreSQL into the trending engine |
+| `GET /hashtags/status` | Hashtags and minute buckets the engine holds |
+| `GET /hashtags/recommend/{hashtag}?max_recommendations=3` | Hashtags that appear on at least 30 percent of the target's posts |
+| `GET /comments/depth/{post_id}` | Deepest reply level, comment and reply counts |
+| `GET /comments/viral/{post_id}` | Longest chain where every comment has 3 or more replies or 10 or more upvotes |
+| `GET /comments/tree/{post_id}` | The full comment thread as nested JSON |
+| `GET /reports/most-engaged-users?limit=10` | Users ranked by engagements on their posts and comments |
+| `GET /reports/top-hashtags?limit=10` | Hashtags ranked by distinct users |
+| `GET /reports/fastest-growing-hashtags?hours=24&limit=10` | Share of each hashtag's posts that landed in the last `hours`, for hashtags with 5 or more posts |
+
+FastAPI validates every query and path parameter and answers 422 when one is out of range.
+A missing post returns 404.
 
 ```bash
-# Start FastAPI server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Or using Python module
-python -m uvicorn app.main:app --reload
+curl -s -X POST "http://localhost:8000/hashtags/sync"
+curl -s "http://localhost:8000/hashtags/trending?window=60&k=3"
 ```
 
-The API will be available at:
+The trending engine lives in the API process, so it starts empty.
+Call `POST /hashtags/sync` once after seeding, or the trending endpoint returns an empty list.
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/health
-
-## 📋 Example Usage
-
-### CLI Commands
-
-#### Database Seeding
+### CLI
 
 ```bash
-# Seed with default values (1000 users, 10000 posts, 150 hashtags)
-python -m app.cli seed
-
-# Seed with custom values
-python -m app.cli seed --users 5000 --posts 50000 --hashtags 300
+uv run python -m app.cli --help
 ```
 
-**Note**: The seeder uses deterministic random generation with fixed seeds (`random.seed(1337)` and `Faker.seed(1337)`), ensuring reproducible data for demos and testing. Running the seed command multiple times will generate identical data sets, making it perfect for consistent development environments and reproducible demonstrations.
+| Command | What it does |
+|---|---|
+| `seed --users N --posts N --hashtags N [--seed N]` | Writes fake users, hashtags, posts, comment threads and engagements |
+| `refresh --posts N` | Adds N new posts for the existing users and hashtags |
+| `trending [--window 60] [--k 10] [--sync]` | Prints the top hashtags, syncing from the database when the engine is empty |
+| `trending-status` | Prints the engine's hashtag and bucket counts |
+| `recommend python [--max 3]` | Prints co-occurring hashtags |
+| `comments depth --post ID` | Prints thread depth metrics for one post |
+| `comments viral --post ID` | Prints the longest viral chain for one post |
+| `reports users [--limit 10]` | Prints the most engaged users |
+| `reports hashtags [--limit 10] [--hours 24]` | Prints top hashtags and the fastest growing ones |
 
-#### Trending Analysis
+## Test
+
+The suite runs against a real PostgreSQL database and a real Redis.
+Many tests delete every row before they run, so point `DATABASE_URL` at a database you can wipe.
 
 ```bash
-# Get top 10 trending hashtags in last hour
-python -m app.cli trending --window 60 --k 10
-
-# Sync with database and show trending
-python -m app.cli trending --sync --sync-minutes 120
-
-# Get recommendations for a hashtag
-python -m app.cli recommend --hashtag "python" --min-rate 0.1
+docker compose up -d db redis
+createdb -h localhost -U app testdb
+export DATABASE_URL=postgresql+psycopg2://app:app@localhost:5432/testdb
+export ENABLE_REDIS_CACHE=true REDIS_URL=redis://localhost:6379/0
+uv run alembic upgrade head
+uv run pytest --cov=app
 ```
 
-#### Comment Analysis
+The Compose database user and password are both `app`.
+Any local PostgreSQL and Redis work the same way.
+Coverage of `app/` must stay at 85 percent or above, set in `pyproject.toml`.
+
+Lint, format and type checks:
 
 ```bash
-# Analyze comment thread depths
-python -m app.cli comment-depths
-
-# Detect viral comment chains
-python -m app.cli viral-chains --min-depth 5 --min-engagement 100
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
 ```
 
-#### Engagement Reports
+`uv run pre-commit install` runs the same checks before each commit.
 
-```bash
-# Top 10 most engaged users
-python -m app.cli top-users --limit 10
-
-# Top hashtags by post count
-python -m app.cli top-hashtags --limit 20
-
-# Fastest growing hashtags in last 24 hours
-python -m app.cli fastest-growing --hours 24 --limit 15
-```
-
-### API Examples
-
-#### Health Check
-
-```bash
-curl -X GET "http://localhost:8000/health"
-```
-
-**Response:**
-
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-09-20T10:30:00Z",
-  "database": "connected",
-  "cache": "connected"
-}
-```
-
-#### Trending Hashtags
-
-```bash
-# Get trending hashtags
-curl -X GET "http://localhost:8000/hashtags/trending?window_minutes=60&k=5"
-```
-
-**Response:**
-
-```json
-{
-  "hashtags": [
-    { "hashtag": "python", "count": 145 },
-    { "hashtag": "datascience", "count": 89 },
-    { "hashtag": "ai", "count": 67 },
-    { "hashtag": "machinelearning", "count": 54 },
-    { "hashtag": "tech", "count": 42 }
-  ],
-  "window_minutes": 60,
-  "total_count": 5
-}
-```
-
-#### Hashtag Recommendations
-
-```bash
-curl -X GET "http://localhost:8000/hashtags/recommendations?target_hashtag=python&min_cooccurrence_rate=0.1"
-```
-
-**Response:**
-
-```json
-{
-  "target_hashtag": "python",
-  "recommendations": [
-    { "hashtag": "programming", "cooccurrence_rate": 0.85 },
-    { "hashtag": "coding", "cooccurrence_rate": 0.72 },
-    { "hashtag": "developer", "cooccurrence_rate": 0.45 }
-  ],
-  "min_cooccurrence_rate": 0.1
-}
-```
-
-#### Comment Analysis
-
-```bash
-# Get comment depth analysis
-curl -X GET "http://localhost:8000/comments/depth-analysis"
-
-# Get viral comment chains
-curl -X GET "http://localhost:8000/comments/viral-chains?min_depth=3&min_engagement=50"
-```
-
-#### Engagement Reports
-
-```bash
-# Get top engaged users
-curl -X GET "http://localhost:8000/reports/top-users?limit=10"
-
-# Get top hashtags
-curl -X GET "http://localhost:8000/reports/top-hashtags?limit=20"
-
-# Get fastest growing hashtags
-curl -X GET "http://localhost:8000/reports/fastest-growing?hours=24&limit=15"
-```
-
-**Top Users Response:**
-
-```json
-{
-  "users": [
-    {
-      "user_id": 42,
-      "username": "alice_data",
-      "total_engagement": 1250,
-      "post_count": 34,
-      "avg_engagement_per_post": 36.76
-    }
-  ],
-  "limit": 10,
-  "total_count": 1
-}
-```
-
-## 📈 Performance
-
-### Database Optimization
-
-The platform includes comprehensive database indexing for optimal query performance:
-
-#### Indexes Added
-
-- **`posts(user_id, created_at)`** - Composite index for user timeline queries
-- **`engagements(user_id, created_at)`** - User engagement history lookups
-- **`post_hashtags(hashtag_id, post_id)`** - Hashtag trending analysis
-- **`post_hashtags(post_id)`** - Post hashtag lookups
-- **`comments(parent_id)`** - Comment threading and depth traversal
-- **`posts(created_at DESC)`** - Recent posts feed
-
-#### Optimized Query Patterns
-
-1. **User Timeline Queries**
-
-   ```sql
-   SELECT * FROM posts
-   WHERE user_id = ? AND created_at >= ?
-   ORDER BY created_at DESC;
-   ```
-
-2. **Trending Analysis**
-
-   ```sql
-   SELECT h.name, COUNT(*) as count
-   FROM hashtags h
-   JOIN post_hashtags ph ON h.id = ph.hashtag_id
-   JOIN posts p ON ph.post_id = p.id
-   WHERE p.created_at >= NOW() - INTERVAL '1 hour'
-   GROUP BY h.id, h.name
-   ORDER BY count DESC;
-   ```
-
-3. **User Engagement Reports**
-
-   ```sql
-   SELECT user_id, COUNT(*) as engagement_count
-   FROM engagements
-   WHERE created_at >= ?
-   GROUP BY user_id
-   ORDER BY engagement_count DESC;
-   ```
-
-4. **Comment Thread Analysis**
-   ```sql
-   WITH RECURSIVE comment_tree AS (
-     SELECT id, parent_id, 1 as depth FROM comments WHERE parent_id IS NULL
-     UNION ALL
-     SELECT c.id, c.parent_id, ct.depth + 1
-     FROM comments c JOIN comment_tree ct ON c.parent_id = ct.id
-   )
-   SELECT depth, COUNT(*) FROM comment_tree GROUP BY depth;
-   ```
-
-#### Performance Validation
-
-To validate query performance improvements, run:
-
-```bash
-# Connect to your PostgreSQL database
-psql $DATABASE_URL
-
-# Run EXPLAIN ANALYZE on heavy queries
-EXPLAIN ANALYZE
-SELECT COUNT(*) FROM posts
-WHERE user_id BETWEEN 1 AND 100
-AND created_at >= NOW() - INTERVAL '7 days';
-
-EXPLAIN ANALYZE
-SELECT h.name, COUNT(*) as post_count
-FROM hashtags h
-JOIN post_hashtags ph ON h.id = ph.hashtag_id
-JOIN posts p ON ph.post_id = p.id
-WHERE p.created_at >= NOW() - INTERVAL '24 hours'
-GROUP BY h.id, h.name
-ORDER BY post_count DESC
-LIMIT 10;
-```
-
-#### Expected Improvements
-
-- **User timeline queries**: 70-90% faster with composite `(user_id, created_at)` index
-- **Trending analysis**: 60-80% faster with optimized hashtag joins
-- **Comment threading**: 50-70% faster recursive traversal with `parent_id` index
-- **Engagement reports**: 80-95% faster aggregations with time-series indexes
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=app --cov-report=html
-
-# Run specific test modules
-pytest tests/test_trending.py
-pytest tests/test_comments.py
-pytest tests/test_reports.py
-```
-
-## 📊 Screenshots
-
-_Screenshots and visual demonstrations would be added here to showcase:_
-
-- _Swagger UI documentation interface_
-- _CLI command outputs_
-- _Sample API responses_
-- _Dashboard views (if frontend is implemented)_
-
-## 🛠️ Development
-
-### Project Structure
+## Architecture
 
 ```
 app/
-├── __init__.py
-├── main.py              # FastAPI application factory
-├── config.py            # Environment configuration
-├── db.py               # Database session management
-├── models.py           # SQLAlchemy ORM models
-├── cli.py              # Typer CLI commands
-├── routes/             # FastAPI route handlers
-│   ├── hashtags.py     # Trending and recommendation endpoints
-│   ├── comments.py     # Comment analysis endpoints
-│   ├── reports.py      # Engagement report endpoints
-│   └── health.py       # Health check endpoint
-└── services/           # Business logic layer
-    ├── seeder.py       # Database seeding utilities
-    ├── trending.py     # Hashtag trending engine
-    ├── comments.py     # Comment analysis algorithms
-    └── reports.py      # Engagement reporting logic
-
-migrations/             # Alembic database migrations
-tests/                  # Pytest test suite
+  main.py            FastAPI app factory, request logging middleware, error handlers
+  cli.py             Typer CLI over the same services
+  config.py          Environment variables
+  db.py              SQLAlchemy engine and a commit-or-rollback session context manager
+  models.py          SQLAlchemy 2.0 models and indexes
+  logging_config.py  JSON log formatter
+  routes/            HTTP layer, Pydantic response models and parameter validation
+  services/
+    trending.py      Sliding window counters, Redis cache, co-occurrence recommendations
+    comments.py      Recursive depth analysis and backtracking viral chain search
+    reports.py       Engagement reports in SQL, plus a transactional engagement insert
+    seeder.py        Faker data generator
+migrations/          Alembic revisions
+tests/               pytest suite, mostly against PostgreSQL
 ```
 
-### Contributing
+The routes and the CLI are thin.
+Both call the same functions in `app/services/`, which take a SQLAlchemy session.
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'feat: add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
+**Trending.**
+`TrendingEngine` keeps a count per hashtag per minute in memory and drops buckets older than its window.
+`top(k, window)` sums the buckets inside the window.
+With Redis enabled it caches each `(window, k)` result for `TRENDING_TTL_SECONDS`, and it falls back to memory alone when Redis is unreachable.
+`populate_trending_from_db` fills the buckets from posts created in the last N minutes.
 
-## 📄 License
+**Recommendations.**
+For a target hashtag, the engine counts how many of its posts also carry each other hashtag.
+It returns those whose share is at least 30 percent.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**Comments.**
+Depth analysis walks each thread recursively with memoized subtree depths.
+Viral chain search backtracks from every root comment that meets the viral rule and keeps the longest path.
 
-## 🏗️ Milestones Completed
+**Reports.**
+Each report is one SQL query with joins and aggregates.
+Report and trending queries retry with exponential backoff through tenacity.
 
-- ✅ **Milestone 0**: Repository bootstrap and CI setup
-- ✅ **Milestone 1**: SQLAlchemy schema and Alembic migrations
-- ✅ **Milestone 2**: Faker-powered dataset seeding
-- ✅ **Milestone 3**: Trending hashtag engine with Redis caching
-- ✅ **Milestone 4**: Comment depth analysis and viral chain detection
-- ✅ **Milestone 5**: Complex engagement reports with SQL aggregations
-- ✅ **Milestone 6**: System design improvements (caching, retries, fault tolerance)
-- ✅ **Milestone 7**: Demo polish and comprehensive documentation
-- ✅ **Milestone 8**: Performance optimization with database indexing
+**Schema.**
+Tables hold users, posts, hashtags, the post to hashtag link, comments and engagements.
+A `hashtag_cooccurrence` table exists in the schema, but no code reads or writes it yet.
+Indexes cover the hot paths, including `posts(user_id, created_at)`, `post_hashtags(hashtag_id, post_id)`, `comments(parent_id)` and `engagements(target_type, target_id, created_at)`.
+CI runs `alembic check`, so a model change without a migration fails the build.
 
-## ER DIAGRAM
-<img width="1284" height="1098" alt="image" src="https://github.com/user-attachments/assets/324bfc88-9116-4688-b3ea-ccb3346912d1" />
+<img width="1284" height="1098" alt="Entity relationship diagram" src="https://github.com/user-attachments/assets/324bfc88-9116-4688-b3ea-ccb3346912d1" />
 
+**Logging and errors.**
+The `app` logger writes JSON lines to stderr.
+Every request logs its method, path, status and duration.
+Unhandled exceptions log their traceback and return a 500 body with an `error_code`.
 
----
+## CI
 
-_Built with ❤️ using FastAPI, SQLAlchemy, PostgreSQL, and Redis_
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request.
+
+| Job | Steps |
+|---|---|
+| Lint and typecheck | `uv lock --check`, ruff lint, ruff format check, mypy |
+| Tests with coverage | Migrations, `alembic check`, pytest with the 85 percent gate, against PostgreSQL 16 and Redis 7 services |
+| Dependency audit | `pip-audit --strict` on the locked environment |
+| Secret scan | gitleaks over the full history |
+
+Dependabot opens weekly update pull requests for the uv lockfile and the GitHub Actions versions.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
