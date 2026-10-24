@@ -309,11 +309,11 @@ def reports_cmd(
                     typer.echo("─" * 70)
 
                     for i, hashtag in enumerate(growing_data, 1):
-                        growth_pct = hashtag["growth_rate"] * 100
+                        growth = f"{hashtag['growth_rate'] * 100:.1f}%"
                         typer.echo(
                             f"{i:<3} "
                             f"#{hashtag['hashtag_name']:<24} "
-                            f"{growth_pct:<7.1f}% "
+                            f"{growth:<8} "
                             f"{hashtag['recent_posts']:<8,} "
                             f"{hashtag['total_posts']:<8,}"
                         )

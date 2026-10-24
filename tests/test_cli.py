@@ -1,5 +1,7 @@
 """End-to-end tests for the Typer CLI against PostgreSQL."""
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -183,6 +185,17 @@ def test_reports_hashtags_lists_top_and_growing_tags(seeded):
     assert result.exit_code == 0, result.output
     assert "Top 3 Hashtags by Unique Users" in result.output
     assert "Fastest Growing Hashtags (last 1 hours)" in result.output
+
+
+def test_reports_hashtags_keeps_the_percent_sign_next_to_the_growth_rate(seeded):
+    result = runner.invoke(cli.app, ["reports", "hashtags", "--limit", "3"])
+
+    header = next(line for line in result.output.splitlines() if "Growth" in line)
+    rows = re.findall(r"^\d+\s+#\S+\s+(\S+)\s+\d+\s+\d+\s*$", result.output, re.MULTILINE)
+    assert rows, result.output
+    assert all(re.fullmatch(r"\d+\.\d%", growth) for growth in rows)
+    row = next(line for line in result.output.splitlines() if rows[0] in line)
+    assert row.index(rows[0]) == header.index("Growth")
 
 
 def test_reports_users_on_an_empty_database(empty_db):
