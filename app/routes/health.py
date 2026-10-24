@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app import __version__
 from app.clock import utc_now
 from app.db import get_session
 from app.services.trending import redis_client
@@ -91,7 +92,7 @@ async def health_check() -> dict[str, Any]:
         "status": overall_status,
         "db": db_health,
         "redis": redis_health,
-        "version": "1.0.0",
+        "version": __version__,
         "timestamp": utc_now().isoformat(),
     }
 

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app import __version__
 from app.logging_config import configure_logging
 from app.routes.comments import router as comments_router
 from app.routes.hashtags import router as hashtags_router
@@ -32,7 +33,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Social Media Analytics API",
         description="Real-time hashtag trending and engagement analytics platform",
-        version="1.0.0",
+        version=__version__,
         docs_url="/docs",
         redoc_url="/redoc",
     )
@@ -116,7 +117,7 @@ app = create_app()
 @app.get("/")
 async def root():
     """Health check endpoint."""
-    return {"message": "Social Media Analytics API", "status": "healthy", "version": "1.0.0"}
+    return {"message": "Social Media Analytics API", "status": "healthy", "version": __version__}
 
 
 @app.get("/health")
