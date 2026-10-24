@@ -32,11 +32,12 @@ def get_most_engaged_users(session: Session, limit: int = 10) -> list[dict[str, 
     # Complex query joining users, posts, comments, and engagements
     # We need to count engagements on both posts and comments by each user
     query = text("""
-        SELECT 
+        SELECT
             u.id as user_id,
             u.handle,
             u.created_at,
-            COALESCE(post_engagements.total, 0) + COALESCE(comment_engagements.total, 0) as total_engagements,
+            COALESCE(post_engagements.total, 0)
+                + COALESCE(comment_engagements.total, 0) as total_engagements,
             COALESCE(post_engagements.total, 0) as post_engagements,
             COALESCE(comment_engagements.total, 0) as comment_engagements,
             COALESCE(posts_count.count, 0) as posts_count,
@@ -158,20 +159,20 @@ def get_fastest_growing_hashtags(
     """
     # Complex query to calculate growth rate
     query = text("""
-        SELECT 
+        SELECT
             h.id as hashtag_id,
             h.name as hashtag_name,
             recent_posts.count as recent_posts,
             total_posts.count as total_posts,
-            CASE 
-                WHEN total_posts.count > 0 THEN 
-                    CAST(recent_posts.count AS FLOAT) / total_posts.count 
-                ELSE 0 
+            CASE
+                WHEN total_posts.count > 0 THEN
+                    CAST(recent_posts.count AS FLOAT) / total_posts.count
+                ELSE 0
             END as growth_rate,
             recent_posts.unique_users as recent_unique_users
         FROM hashtags h
         JOIN (
-            SELECT 
+            SELECT
                 ph.hashtag_id,
                 COUNT(*) as count,
                 COUNT(DISTINCT p.user_id) as unique_users
@@ -182,7 +183,7 @@ def get_fastest_growing_hashtags(
             HAVING COUNT(*) >= 2  -- Minimum activity threshold
         ) recent_posts ON h.id = recent_posts.hashtag_id
         JOIN (
-            SELECT 
+            SELECT
                 ph.hashtag_id,
                 COUNT(*) as count
             FROM post_hashtags ph

@@ -87,7 +87,7 @@ def trending_cmd(
 
     except Exception as e:
         typer.echo(f"❌ Error getting trending hashtags: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command("recommend")
@@ -126,7 +126,7 @@ def recommend_cmd(
 
     except Exception as e:
         typer.echo(f"❌ Error getting recommendations: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command("trending-status")
@@ -154,7 +154,7 @@ def trending_status_cmd():
 
     except Exception as e:
         typer.echo(f"❌ Error getting engine status: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command("comments")
@@ -206,10 +206,10 @@ def comments_cmd(
 
     except ValueError as e:
         typer.echo(f"❌ {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     except Exception as e:
         typer.echo(f"❌ Error analyzing comments: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command("reports")
@@ -240,7 +240,8 @@ def reports_cmd(
                 typer.echo(f"\n👥 Top {len(users_data)} Most Engaged Users:")
                 typer.echo("─" * 80)
                 typer.echo(
-                    f"{'#':<3} {'Handle':<20} {'Total':<8} {'Posts':<8} {'Comments':<8} {'P Count':<8} {'C Count':<8}"
+                    f"{'#':<3} {'Handle':<20} {'Total':<8} {'Posts':<8} "
+                    f"{'Comments':<8} {'P Count':<8} {'C Count':<8}"
                 )
                 typer.echo("─" * 80)
 
@@ -321,7 +322,7 @@ def reports_cmd(
 
     except Exception as e:
         typer.echo(f"❌ Error generating {report_type} report: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command("refresh")

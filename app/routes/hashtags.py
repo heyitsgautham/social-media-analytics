@@ -81,7 +81,7 @@ async def get_trending_hashtags(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to retrieve trending hashtags: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/recommend/{hashtag}", response_model=RecommendationResponse)
@@ -125,7 +125,7 @@ async def get_hashtag_recommendations(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve recommendations for #{clean_hashtag}: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/status", response_model=EngineStatus)
@@ -141,7 +141,9 @@ async def get_engine_status() -> EngineStatus:
         return EngineStatus(**status_data)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve engine status: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve engine status: {str(e)}"
+        ) from e
 
 
 @router.post("/sync")
@@ -169,4 +171,6 @@ async def sync_from_database(
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to sync trending data: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to sync trending data: {str(e)}"
+        ) from e

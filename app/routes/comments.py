@@ -38,9 +38,9 @@ def get_comment_depth_analysis(
                 "average_replies_per_comment": round(analysis.average_replies_per_comment, 2),
             }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
 @router.get("/viral/{post_id}", response_model=dict)
@@ -72,9 +72,9 @@ def get_viral_chain_analysis(
                 "criteria": {"min_replies": 3, "min_upvotes": 10},
             }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
 @router.get("/tree/{post_id}", response_model=dict)
@@ -92,6 +92,6 @@ def get_comment_tree(
             tree = get_comment_tree_structure(db, post_id)
             return tree
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e

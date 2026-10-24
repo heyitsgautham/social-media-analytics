@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum as PyEnum
 
 from sqlalchemy import (
     CheckConstraint,
@@ -83,8 +84,6 @@ class Comment(Base):
 
 
 Index("idx_comments_parent", Comment.parent_id)
-
-from enum import Enum as PyEnum
 
 
 class TargetType(str, PyEnum):

@@ -101,7 +101,7 @@ async def get_most_engaged_users_endpoint(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error retrieving most engaged users: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/top-hashtags", response_model=TopHashtagsResponse)
@@ -127,7 +127,9 @@ async def get_top_hashtags_endpoint(
             return TopHashtagsResponse(hashtags=hashtags, total_count=total_count)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving top hashtags: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving top hashtags: {str(e)}"
+        ) from e
 
 
 @router.get("/fastest-growing-hashtags", response_model=FastestGrowingHashtagsResponse)
@@ -158,4 +160,4 @@ async def get_fastest_growing_hashtags_endpoint(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error retrieving fastest growing hashtags: {str(e)}"
-        )
+        ) from e

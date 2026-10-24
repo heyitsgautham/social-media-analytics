@@ -306,7 +306,6 @@ def get_comment_tree_structure(db: Session, post_id: int) -> dict:
         return {"post_id": post_id, "comments": []}
 
     # Build comment tree
-    comment_dict = {c.id: c for c in comments}
     root_comments = [c for c in comments if c.parent_id is None]
 
     def build_tree_node(comment: Comment) -> dict:
