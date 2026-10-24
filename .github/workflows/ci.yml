@@ -2,10 +2,44 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    name: Lint and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+
+      - name: Check uv.lock matches pyproject.toml
+        run: uv lock --check
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy
+
   test:
+    name: Tests with coverage
     runs-on: ubuntu-latest
 
     services:
@@ -25,55 +59,68 @@ jobs:
 
       redis:
         image: redis:7
+        ports:
+          - 6379:6379
         options: >-
-          --health-cmd="redis-cli ping || exit 1"
+          --health-cmd="redis-cli ping"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=10
 
     env:
       DATABASE_URL: postgresql+psycopg2://app:app@localhost:5432/testdb
-      ENABLE_REDIS_CACHE: "true"         
+      ENABLE_REDIS_CACHE: "true"
       REDIS_URL: redis://localhost:6379/0
       TRENDING_TTL_SECONDS: "60"
-      PYTHONPATH: .
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
 
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-
-      - name: Install Postgres client (psql, pg_isready)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-
-      - name: Wait for Postgres on localhost
-        shell: bash
-        run: |
-          set -e
-          echo "Waiting for pg_isready on localhost..."
-          for i in {1..60}; do
-            if pg_isready -h 127.0.0.1 -p 5432 -U app -d testdb; then
-              break
-            fi
-            echo "pg_isready not ready... ($i)"
-            sleep 2
-          done
-
-          echo "Verifying with psql (SELECT 1) on localhost..."
-          PGPASSWORD=app psql -h 127.0.0.1 -U app -d testdb -v ON_ERROR_STOP=1 -c "SELECT 1;"
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: Apply migrations
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
+
+      - name: Check models match migrations
+        run: uv run alembic check
 
       - name: Run tests
-        run: pytest -q
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: pip-audit
+        run: uv run pip-audit --strict
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

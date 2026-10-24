@@ -57,3 +57,12 @@ files = ["app"]
 check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+skip_covered = true
