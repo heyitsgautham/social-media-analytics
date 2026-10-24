@@ -7,7 +7,16 @@ from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import DB_RETRY_ATTEMPTS, DB_RETRY_MAX_WAIT, DB_RETRY_MIN_WAIT
-from app.models import Comment, Engagement, Hashtag, Post, PostHashtag, User
+from app.models import (
+    Comment,
+    Engagement,
+    EngagementKind,
+    Hashtag,
+    Post,
+    PostHashtag,
+    TargetType,
+    User,
+)
 
 
 @retry(
@@ -209,11 +218,6 @@ def get_fastest_growing_hashtags(
     ]
 
 
-@retry(
-    stop=stop_after_attempt(DB_RETRY_ATTEMPTS),
-    wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
-    reraise=True,
-)
 def insert_engagement_with_transaction(
     db: Session,
     user_id: int,
@@ -222,15 +226,18 @@ def insert_engagement_with_transaction(
     kind: str,
     also_increment_counter: bool = True,
 ) -> dict:
-    """Insert engagement record with transaction management.
+    """Insert one engagement inside the caller's transaction.
 
-    For testing purposes, user_ids >= 999999 will trigger a simulated failure.
-    Returns a dictionary with operation status and details.
+    The caller owns the session and decides when to commit, so this function never
+    retries. A retry inside the same session would replay against rows the failed
+    attempt already flushed. A comment like also bumps the comment's upvotes when
+    also_increment_counter is set. Posts have no counter column, so a post
+    engagement never reports counter_updated.
+
+    Raises:
+        ValueError: on an unknown target_type or kind, a missing user or target,
+            or a duplicate engagement.
     """
-    # Check for simulated error (testing)
-    if user_id >= 999999:
-        raise Exception("Simulated transaction failure for testing")
-
     # Validate target_type
     valid_target_types = ["post", "comment"]
     if target_type not in valid_target_types:
@@ -247,13 +254,13 @@ def insert_engagement_with_transaction(
         raise ValueError(f"User {user_id} not found")
 
     # Verify target exists
+    comment: Comment | None = None
     if target_type == "post":
-        target = db.query(Post).filter(Post.id == target_id).first()
-        if not target:
+        if db.query(Post.id).filter(Post.id == target_id).first() is None:
             raise ValueError(f"Post {target_id} not found")
-    elif target_type == "comment":
-        target = db.query(Comment).filter(Comment.id == target_id).first()
-        if not target:
+    else:
+        comment = db.query(Comment).filter(Comment.id == target_id).first()
+        if comment is None:
             raise ValueError(f"Comment {target_id} not found")
 
     # Check for duplicate engagement
@@ -275,35 +282,18 @@ def insert_engagement_with_transaction(
     # Insert engagement
     engagement = Engagement(
         user_id=user_id,
-        target_type=target_type,
+        target_type=TargetType(target_type),
         target_id=target_id,
-        kind=kind,
+        kind=EngagementKind(kind),
         created_at=datetime.utcnow(),
     )
     db.add(engagement)
     db.flush()  # Get the ID
 
     counter_updated = False
-    if also_increment_counter:
-        # Increment hashtag counts if this is a post engagement
-        if target_type == "post":
-            post = db.query(Post).filter(Post.id == target_id).first()
-            if post and post.hashtags:
-                for hashtag_text in post.hashtags:
-                    # Find or create hashtag
-                    hashtag = db.query(Hashtag).filter(Hashtag.tag == hashtag_text).first()
-                    if hashtag:
-                        hashtag.engagement_count = (hashtag.engagement_count or 0) + 1
-                    else:
-                        hashtag = Hashtag(tag=hashtag_text, engagement_count=1)
-                        db.add(hashtag)
-                counter_updated = True
-        # Increment comment upvotes if this is a comment like
-        elif target_type == "comment" and kind == "like":
-            comment = db.query(Comment).filter(Comment.id == target_id).first()
-            if comment:
-                comment.upvotes = (comment.upvotes or 0) + 1
-                counter_updated = True
+    if also_increment_counter and comment is not None and kind == "like":
+        comment.upvotes = (comment.upvotes or 0) + 1
+        counter_updated = True
 
     return {
         "success": True,

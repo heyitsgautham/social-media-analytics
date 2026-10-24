@@ -8,7 +8,16 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.db import get_session
-from app.models import Comment, Engagement, Hashtag, Post, PostHashtag, User
+from app.models import (
+    Comment,
+    Engagement,
+    EngagementKind,
+    Hashtag,
+    Post,
+    PostHashtag,
+    TargetType,
+    User,
+)
 from app.services.reports import (
     get_fastest_growing_hashtags,
     get_most_engaged_users,
@@ -351,47 +360,24 @@ def test_insert_engagement_invalid_user_error(test_data):
 
 
 def test_insert_engagement_transaction_rollback(test_data):
-    """Test transaction rollback on simulated error."""
-    import time
-
-    # Use a more unique user ID to avoid conflicts
-    test_user_id = 999999 + int(time.time() * 1000) % 10000
+    """An error after the insert rolls the engagement and the upvote bump back together."""
+    before = None
+    with pytest.raises(RuntimeError, match="fail after insert"), get_session() as db:
+        before = db.query(Engagement).count()
+        result = insert_engagement_with_transaction(
+            db,
+            user_id=1,
+            target_type="comment",
+            target_id=4,
+            kind="like",
+            also_increment_counter=True,
+        )
+        assert result["counter_updated"] is True
+        raise RuntimeError("fail after insert")
 
     with get_session() as db:
-        # Count initial engagements
-        initial_count = db.query(Engagement).count()
-
-        # Clean up any existing data for this user first
-        db.query(Engagement).filter(Engagement.user_id == test_user_id).delete()
-        db.query(User).filter(User.id == test_user_id).delete()
-        db.flush()
-
-        # Create a user with the test ID to pass user validation (in same transaction)
-        test_user = User(id=test_user_id, handle=f"test_rollback_user_{test_user_id}")
-        db.add(test_user)
-        db.flush()  # Make user available in this transaction without committing
-
-        # Try to insert with special user_id that triggers error in the function
-        with pytest.raises(Exception, match="Simulated transaction failure"):
-            insert_engagement_with_transaction(
-                db,
-                user_id=test_user_id,  # Use our unique test user ID
-                target_type="post",
-                target_id=1,
-                kind="like",
-                also_increment_counter=False,
-            )
-
-        # The with get_session() context manager should handle the rollback
-        db.rollback()  # Explicitly rollback to test the behavior
-
-        # Verify no engagement was inserted (transaction rolled back)
-        final_count = db.query(Engagement).count()
-        assert final_count == initial_count
-
-        # Verify test user was also rolled back
-        rolled_back_user = db.query(User).filter(User.id == test_user_id).first()
-        assert rolled_back_user is None
+        assert db.query(Engagement).count() == before
+        assert db.query(Comment).filter(Comment.id == 4).one().upvotes == 0
 
 
 def test_insert_engagement_invalid_enum_values(test_data):
@@ -446,3 +432,24 @@ def test_reports_with_no_data():
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+def test_insert_post_engagement_with_counter_on_tagged_post(test_data):
+    """A like on a post that has hashtags commits and reports no counter change."""
+    with get_session() as db:
+        result = insert_engagement_with_transaction(
+            db,
+            user_id=3,  # charlie has not bookmarked post 1 yet
+            target_type="post",
+            target_id=1,  # alice's post tagged #python
+            kind="bookmark",
+            also_increment_counter=True,
+        )
+
+        assert result["success"] is True
+        assert result["counter_updated"] is False
+
+    with get_session() as db:
+        stored = db.query(Engagement).filter(Engagement.id == result["engagement_id"]).one()
+        assert stored.kind == EngagementKind.bookmark
+        assert stored.target_type == TargetType.post
