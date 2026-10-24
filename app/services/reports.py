@@ -1,13 +1,13 @@
 # app/services/reports.py
-from datetime import datetime, timedelta
-from typing import List, Tuple, Dict, Any
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import func, text, desc, and_
+from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.config import DB_RETRY_ATTEMPTS, DB_RETRY_MIN_WAIT, DB_RETRY_MAX_WAIT
-from app.models import User, Post, Hashtag, PostHashtag, Engagement, Comment
+from app.config import DB_RETRY_ATTEMPTS, DB_RETRY_MAX_WAIT, DB_RETRY_MIN_WAIT
+from app.models import Comment, Engagement, Hashtag, Post, PostHashtag, User
 
 
 @retry(
@@ -15,17 +15,17 @@ from app.models import User, Post, Hashtag, PostHashtag, Engagement, Comment
     wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
     reraise=True,
 )
-def get_most_engaged_users(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
+def get_most_engaged_users(session: Session, limit: int = 10) -> list[dict[str, Any]]:
     """
     Get users ranked by total engagements (likes, comments, shares, views).
-    
+
     Returns users with their total engagement counts across all their content.
     Includes both post and comment engagements.
-    
+
     Args:
         session: Database session
         limit: Maximum number of users to return
-        
+
     Returns:
         List of dicts containing user info and engagement metrics
     """
@@ -70,9 +70,9 @@ def get_most_engaged_users(session: Session, limit: int = 10) -> List[Dict[str, 
         ORDER BY total_engagements DESC, u.handle ASC
         LIMIT :limit
     """)
-    
+
     result = session.execute(query, {"limit": limit}).fetchall()
-    
+
     return [
         {
             "user_id": row.user_id,
@@ -93,17 +93,17 @@ def get_most_engaged_users(session: Session, limit: int = 10) -> List[Dict[str, 
     wait=wait_exponential(multiplier=1, min=DB_RETRY_MIN_WAIT, max=DB_RETRY_MAX_WAIT),
     reraise=True,
 )
-def get_top_hashtags(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
+def get_top_hashtags(session: Session, limit: int = 10) -> list[dict[str, Any]]:
     """
     Get top hashtags by unique users who used them.
-    
+
     Ranks hashtags by the number of distinct users who have posted with them,
     rather than just total post count.
-    
+
     Args:
         session: Database session
         limit: Maximum number of hashtags to return
-        
+
     Returns:
         List of dicts containing hashtag info and metrics
     """
@@ -121,9 +121,9 @@ def get_top_hashtags(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
         .order_by(desc("unique_users"), desc("total_posts"), Hashtag.name)
         .limit(limit)
     )
-    
+
     result = query.all()
-    
+
     return [
         {
             "hashtag_id": row.hashtag_id,
@@ -142,17 +142,17 @@ def get_top_hashtags(session: Session, limit: int = 10) -> List[Dict[str, Any]]:
 )
 def get_fastest_growing_hashtags(
     session: Session, since: datetime, limit: int = 10
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Get hashtags with fastest growth since a given time.
-    
+
     Compares usage in the time period vs overall usage to find trending hashtags.
-    
+
     Args:
         session: Database session
         since: Start time for growth calculation
         limit: Maximum number of hashtags to return
-        
+
     Returns:
         List of dicts containing hashtag growth metrics
     """
@@ -192,9 +192,9 @@ def get_fastest_growing_hashtags(
         ORDER BY growth_rate DESC, recent_posts.count DESC, h.name ASC
         LIMIT :limit
     """)
-    
+
     result = session.execute(query, {"since": since, "limit": limit}).fetchall()
-    
+
     return [
         {
             "hashtag_id": row.hashtag_id,
@@ -222,29 +222,29 @@ def insert_engagement_with_transaction(
     also_increment_counter: bool = True,
 ) -> dict:
     """Insert engagement record with transaction management.
-    
+
     For testing purposes, user_ids >= 999999 will trigger a simulated failure.
     Returns a dictionary with operation status and details.
     """
     # Check for simulated error (testing)
     if user_id >= 999999:
         raise Exception("Simulated transaction failure for testing")
-    
+
     # Validate target_type
     valid_target_types = ["post", "comment"]
     if target_type not in valid_target_types:
         raise ValueError(f"Invalid target_type. Must be one of: {valid_target_types}")
-    
+
     # Validate kind
     valid_kinds = ["like", "bookmark", "share"]
     if kind not in valid_kinds:
         raise ValueError(f"Invalid engagement kind. Must be one of: {valid_kinds}")
-    
+
     # Verify user exists
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise ValueError(f"User {user_id} not found")
-    
+
     # Verify target exists
     if target_type == "post":
         target = db.query(Post).filter(Post.id == target_id).first()
@@ -254,7 +254,7 @@ def insert_engagement_with_transaction(
         target = db.query(Comment).filter(Comment.id == target_id).first()
         if not target:
             raise ValueError(f"Comment {target_id} not found")
-    
+
     # Check for duplicate engagement
     existing = (
         db.query(Engagement)
@@ -267,8 +267,10 @@ def insert_engagement_with_transaction(
         .first()
     )
     if existing:
-        raise ValueError(f"User {user_id} already has {kind} engagement on {target_type} {target_id}")
-    
+        raise ValueError(
+            f"User {user_id} already has {kind} engagement on {target_type} {target_id}"
+        )
+
     # Insert engagement
     engagement = Engagement(
         user_id=user_id,
@@ -279,7 +281,7 @@ def insert_engagement_with_transaction(
     )
     db.add(engagement)
     db.flush()  # Get the ID
-    
+
     counter_updated = False
     if also_increment_counter:
         # Increment hashtag counts if this is a post engagement
@@ -301,7 +303,7 @@ def insert_engagement_with_transaction(
             if comment:
                 comment.upvotes = (comment.upvotes or 0) + 1
                 counter_updated = True
-    
+
     return {
         "success": True,
         "engagement_id": engagement.id,

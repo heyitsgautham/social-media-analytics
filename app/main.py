@@ -2,16 +2,17 @@
 Main FastAPI application for Social Media Analytics Platform.
 """
 
+import traceback
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
-import traceback
 
-from app.routes.hashtags import router as hashtags_router
 from app.routes.comments import router as comments_router
-from app.routes.reports import router as reports_router
+from app.routes.hashtags import router as hashtags_router
 from app.routes.health import router as health_router
+from app.routes.reports import router as reports_router
 
 
 def create_app() -> FastAPI:
@@ -90,6 +91,7 @@ async def root():
 async def health_check():
     """Detailed health check endpoint (legacy - redirects to /health/)."""
     from app.routes.health import health_check as detailed_health_check
+
     return await detailed_health_check()
 
 

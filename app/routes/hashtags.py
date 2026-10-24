@@ -2,8 +2,6 @@
 FastAPI routes for hashtag trending and recommendations.
 """
 
-from typing import List, Optional
-
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -28,7 +26,7 @@ class RecommendedHashtag(BaseModel):
 class TrendingResponse(BaseModel):
     """Response model for trending hashtags endpoint."""
 
-    hashtags: List[TrendingHashtag] = Field(..., description="List of trending hashtags")
+    hashtags: list[TrendingHashtag] = Field(..., description="List of trending hashtags")
     window_minutes: int = Field(..., description="Window size used")
     total_count: int = Field(..., description="Total number of trending hashtags")
 
@@ -37,7 +35,7 @@ class RecommendationResponse(BaseModel):
     """Response model for hashtag recommendations."""
 
     target_hashtag: str = Field(..., description="Target hashtag")
-    recommendations: List[RecommendedHashtag] = Field(
+    recommendations: list[RecommendedHashtag] = Field(
         ..., description="List of recommended hashtags"
     )
     min_cooccurrence_rate: float = Field(..., description="Minimum co-occurrence rate used")
@@ -148,7 +146,7 @@ async def get_engine_status() -> EngineStatus:
 
 @router.post("/sync")
 async def sync_from_database(
-    minutes_back: int = Query(60, ge=1, le=1440, description="Minutes of data to sync (1-1440)")
+    minutes_back: int = Query(60, ge=1, le=1440, description="Minutes of data to sync (1-1440)"),
 ) -> dict:
     """
     Sync trending engine with recent database data.

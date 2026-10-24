@@ -9,7 +9,8 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-from typing import Generator
+from collections.abc import Generator
+
 
 @contextmanager
 def get_session() -> Generator[Session, None, None]:

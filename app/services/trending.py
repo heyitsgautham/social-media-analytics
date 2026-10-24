@@ -9,7 +9,6 @@ import json
 import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 
 import redis
 from sqlalchemy import func, text
@@ -31,7 +30,7 @@ from app.models import Hashtag, Post, PostHashtag
 class RedisClient:
     """Redis client wrapper with connection handling and failover."""
 
-    def __init__(self, enabled: Optional[bool] = None, url: Optional[str] = None):
+    def __init__(self, enabled: bool | None = None, url: str | None = None):
         """
         Initialize Redis client.
 
@@ -39,7 +38,7 @@ class RedisClient:
             enabled: Whether caching is on. Defaults to ENABLE_REDIS_CACHE.
             url: Redis connection URL. Defaults to REDIS_URL.
         """
-        self._client: Optional[redis.Redis] = None
+        self._client: redis.Redis | None = None
         self._enabled = ENABLE_REDIS_CACHE if enabled is None else enabled
         self._url = REDIS_URL if url is None else url
         self._initialize_client()
@@ -62,7 +61,7 @@ class RedisClient:
         """Check if Redis is available."""
         return self._enabled and self._client is not None
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         """Get value from Redis with error handling."""
         if not self.is_available:
             return None
@@ -121,7 +120,7 @@ class TrendingEngine:
     Provides top(k, window=W) API and hashtag recommendations.
     """
 
-    def __init__(self, window_minutes: int = 60, cache: Optional[RedisClient] = None):
+    def __init__(self, window_minutes: int = 60, cache: RedisClient | None = None):
         """
         Initialize trending engine.
 
@@ -132,7 +131,7 @@ class TrendingEngine:
         self.window_minutes = window_minutes
         self.cache = cache if cache is not None else redis_client
         # Structure: {hashtag_name: {minute_timestamp: count}}
-        self.counters: Dict[str, Dict[int, int]] = defaultdict(lambda: defaultdict(int))
+        self.counters: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
         self._last_cleanup = int(time.time() // 60)
 
     def _get_minute_timestamp(self) -> int:
@@ -170,7 +169,7 @@ class TrendingEngine:
         current_minute = self._get_minute_timestamp()
         self.counters[hashtag][current_minute] += count
 
-    def get_count(self, hashtag: str, window_minutes: Optional[int] = None) -> int:
+    def get_count(self, hashtag: str, window_minutes: int | None = None) -> int:
         """
         Get total count for hashtag within window.
 
@@ -202,7 +201,7 @@ class TrendingEngine:
 
         return total
 
-    def top(self, k: int = 10, window_minutes: Optional[int] = None) -> List[Tuple[str, int]]:
+    def top(self, k: int = 10, window_minutes: int | None = None) -> list[tuple[str, int]]:
         """
         Get top k hashtags by count within window.
 
@@ -245,7 +244,7 @@ class TrendingEngine:
 
         return result
 
-    def _compute_top(self, k: int, window: int) -> List[Tuple[str, int]]:
+    def _compute_top(self, k: int, window: int) -> list[tuple[str, int]]:
         """
         Compute top hashtags without caching.
 
@@ -273,7 +272,7 @@ class TrendingEngine:
 
         return hashtag_counts[:k]
 
-    def invalidate_cache(self, k: int = 10, window_minutes: Optional[int] = None) -> bool:
+    def invalidate_cache(self, k: int = 10, window_minutes: int | None = None) -> bool:
         """
         Invalidate cached trending results.
 
@@ -288,7 +287,7 @@ class TrendingEngine:
         cache_key = f"cache:trending:{window}:{k}"
         return self.cache.delete(cache_key)
 
-    def get_status(self) -> Dict[str, int]:
+    def get_status(self) -> dict[str, int]:
         """
         Get engine status for health checks.
 
@@ -332,7 +331,7 @@ class RecommendationEngine:
     )
     def get_recommendations(
         self, hashtag: str, max_recommendations: int = 3
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Get hashtag recommendations based on co-occurrence.
 
@@ -348,7 +347,7 @@ class RecommendationEngine:
 
     def _compute_recommendations(
         self, db: Session, hashtag: str, max_recommendations: int
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Compute recommendations using database co-occurrence analysis.
 

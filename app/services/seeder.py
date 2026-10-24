@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Sequence
 
 from faker import Faker
 from sqlalchemy.orm import Session
@@ -26,6 +26,7 @@ def seed_random_generators(seed=None):
     global fake
     if seed is None:
         import time
+
         seed = int(time.time() * 1000000) % 2**32  # Random seed based on time
     random.seed(seed)
     fake = Faker()
@@ -74,7 +75,6 @@ def make_hashtags(db: Session, n_tags: int) -> list[Hashtag]:
 def make_posts(
     db: Session, users: Sequence[User], hashtags: Sequence[Hashtag], n_posts: int
 ) -> list[Post]:
-    from datetime import datetime, timedelta
     posts: list[Post] = []
     for _ in range(n_posts):
         u = random.choice(users)

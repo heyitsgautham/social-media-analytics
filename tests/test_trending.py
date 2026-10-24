@@ -2,7 +2,6 @@
 Tests for trending engine and recommendation system.
 """
 
-import time
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -10,7 +9,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import get_session
 from app.models import Base, Hashtag, Post, PostHashtag, User
 from app.services.trending import (
     RecommendationEngine,
