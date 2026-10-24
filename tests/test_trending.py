@@ -302,8 +302,6 @@ class TestDatabaseIntegration:
 
     def test_populate_trending_from_db(self, sample_data):
         """Test populating trending engine from database."""
-        engine = TrendingEngine(window_minutes=60)
-
         with patch("app.services.trending.get_session") as mock_get_session:
             mock_get_session.return_value.__enter__.return_value = sample_data["session"]
 

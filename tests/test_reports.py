@@ -324,32 +324,30 @@ def test_insert_engagement_duplicate_error(test_data):
 
 def test_insert_engagement_invalid_target_error(test_data):
     """Test error on invalid target."""
-    with get_session() as db:
-        # Try to engage with non-existent post
-        with pytest.raises(ValueError, match="Post 999 not found"):
-            insert_engagement_with_transaction(
-                db,
-                user_id=1,
-                target_type="post",
-                target_id=999,
-                kind="like",
-                also_increment_counter=False,
-            )
+    # Try to engage with non-existent post
+    with get_session() as db, pytest.raises(ValueError, match="Post 999 not found"):
+        insert_engagement_with_transaction(
+            db,
+            user_id=1,
+            target_type="post",
+            target_id=999,
+            kind="like",
+            also_increment_counter=False,
+        )
 
 
 def test_insert_engagement_invalid_user_error(test_data):
     """Test error on invalid user."""
-    with get_session() as db:
-        # Try to engage with non-existent user
-        with pytest.raises(ValueError, match="User 999 not found"):
-            insert_engagement_with_transaction(
-                db,
-                user_id=999,
-                target_type="post",
-                target_id=1,
-                kind="like",
-                also_increment_counter=False,
-            )
+    # Try to engage with non-existent user
+    with get_session() as db, pytest.raises(ValueError, match="User 999 not found"):
+        insert_engagement_with_transaction(
+            db,
+            user_id=999,
+            target_type="post",
+            target_id=1,
+            kind="like",
+            also_increment_counter=False,
+        )
 
 
 def test_insert_engagement_transaction_rollback(test_data):

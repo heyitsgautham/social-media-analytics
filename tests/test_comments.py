@@ -101,7 +101,7 @@ class TestCommentAnalyzer:
         assert result.max_depth == 3
         assert result.total_comments == 6
         assert result.total_replies == 4  # 4 comments have parents
-        # avg replies: comment 1 has 1 reply, comment 2 has 2 replies, comment 5 has 1 reply, others have 0
+        # avg replies: comment 1 has 1 reply, comment 2 has 2, comment 5 has 1, others have 0
         # total replies across all comments: 4, so 4/6 = 0.67
         expected_avg = 4 / 6
         assert abs(result.average_replies_per_comment - expected_avg) < 0.01
@@ -358,10 +358,10 @@ class TestEdgeCases:
         self.mock_db.query().filter().first.return_value = MockPost(1)
 
         # This should complete without infinite loops
-        # The algorithm naturally handles this since it builds the tree from parent->child relationships
+        # The tree is built from parent to child links, so a cycle never reaches a root
         result = self.analyzer.analyze_depth(self.mock_db, 1)
 
-        # Both comments will be treated as roots since they don't have valid parents in the filtered set
+        # Neither comment has a parent inside the filtered set, so both count as roots
         assert result.total_comments == 2
 
     def test_large_depth_chain(self):

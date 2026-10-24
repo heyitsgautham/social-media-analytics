@@ -231,9 +231,11 @@ class TestRedisCache:
             patch.object(redis_client, "_client", Mock()) as mock_redis,
         ):
             mock_redis.ping.return_value = True
+            mock_delete.return_value = True
             result = trending_engine.invalidate_cache(k=10, window_minutes=60)
 
             mock_delete.assert_called_once_with("cache:trending:60:10")
+            assert result is True
 
 
 class TestRetryLogic:
@@ -244,7 +246,10 @@ class TestRetryLogic:
         """Test successful retry after transient database error."""
         # Mock session that fails twice then succeeds
         mock_db = Mock()
-        mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.all.side_effect = [
+        query_all = (
+            mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.all
+        )
+        query_all.side_effect = [
             SQLAlchemyError("Transient error"),
             SQLAlchemyError("Another transient error"),
             [],  # Success on third try
@@ -264,9 +269,10 @@ class TestRetryLogic:
         """Test retry exhaustion and final failure."""
         # Mock session that always fails
         mock_db = Mock()
-        mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.all.side_effect = SQLAlchemyError(
-            "Persistent error"
+        query_all = (
+            mock_db.query.return_value.join.return_value.join.return_value.filter.return_value.all
         )
+        query_all.side_effect = SQLAlchemyError("Persistent error")
         mock_session.return_value.__enter__.return_value = mock_db
 
         from app.services.trending import populate_trending_from_db
@@ -356,15 +362,13 @@ class TestSystemIntegration:
             # Verify cache was used
             mock_set.assert_called_once()
 
-    def test_sync_endpoint_invalidates_cache(self, client):
-        """Test sync endpoint invalidates cache."""
-        with (
-            patch("app.services.trending.populate_trending_from_db") as mock_populate,
-            patch.object(trending_engine, "invalidate_cache") as mock_invalidate,
-        ):
+    def test_sync_endpoint_calls_populate(self, client):
+        """The sync endpoint loads data through populate_trending_from_db."""
+        with patch("app.services.trending.populate_trending_from_db") as mock_populate:
             response = client.post("/hashtags/sync?minutes_back=60")
 
             assert response.status_code == 200
+            assert response.json()["minutes_back"] == 60
             mock_populate.assert_called_once_with(minutes_back=60)
             # Cache invalidation should happen in populate_trending_from_db
 
