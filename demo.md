@@ -145,7 +145,7 @@ curl -s "http://localhost:8000/hashtags/trending?window=60&k=3"
 ```
 
 ```json
-{"status":"ok","db":{"status":"ok"},"redis":{"status":"ok"},"version":"1.0.0","timestamp":"2026-10-24T21:15:00.382922"}
+{"status":"ok","db":{"status":"ok"},"redis":{"status":"ok"},"version":"0.2.0","timestamp":"2026-10-24T21:15:00.382922"}
 {"message":"Successfully synced trending data from last 60 minutes","minutes_back":60,"status":"success"}
 {"hashtags":[{"hashtag":"ai","count":176},{"hashtag":"travel","count":174},{"hashtag":"news","count":169}],"window_minutes":60,"total_count":3}
 ```
