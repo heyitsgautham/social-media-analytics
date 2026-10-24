@@ -1,3 +1,37 @@
+[project]
+name = "social-media-analytics"
+version = "0.2.0"
+description = "FastAPI and Typer backend for hashtag trending, comment thread analysis and engagement reports on PostgreSQL with a Redis cache"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic==1.20.1",
+    "faker==40.43.0",
+    "fastapi==0.162.0",
+    "httpx==0.28.1",
+    "psycopg2-binary==2.9.13",
+    "pydantic==2.14.1",
+    "python-dotenv==1.2.4",
+    "redis==8.1.0",
+    "sqlalchemy==2.1.6",
+    "tenacity==9.2.1",
+    "typer==0.27.3",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.0",
+    "pip-audit==2.10.1",
+    "pre-commit==4.7.0",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.2",
+]
+
+[tool.uv]
+package = false
+
 [tool.black]
 line-length = 100
 target-version = ["py311"]
@@ -5,3 +39,7 @@ target-version = ["py311"]
 [tool.isort]
 profile = "black"
 line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
