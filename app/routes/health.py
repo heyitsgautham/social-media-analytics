@@ -104,7 +104,7 @@ async def database_health() -> dict[str, Any]:
     Returns:
         Dict with detailed database health information
     """
-    health_status = check_database_health()
+    health_status: dict[str, Any] = dict(check_database_health())
 
     try:
         with get_session() as db:
@@ -137,7 +137,7 @@ async def redis_health() -> dict[str, Any]:
     Returns:
         Dict with detailed Redis health information
     """
-    health_status = check_redis_health()
+    health_status: dict[str, Any] = dict(check_redis_health())
 
     if redis_client.is_available:
         try:

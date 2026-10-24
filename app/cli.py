@@ -187,18 +187,18 @@ def comments_cmd(
                     typer.echo(f"\n💬 Comments have {analysis.max_depth} levels of nesting")
 
             elif action == "viral":
-                analysis = detect_viral_comment_chains(db, post_id)
+                viral = detect_viral_comment_chains(db, post_id)
 
                 typer.echo(f"\n🔥 Viral Chain Analysis for Post {post_id}:")
                 typer.echo("─" * 50)
-                typer.echo(f"Longest chain length:   {analysis.longest_chain_length}")
-                typer.echo(f"Total viral chains:     {analysis.total_viral_chains}")
-                typer.echo(f"Viral criteria met:     {'✓' if analysis.viral_criteria_met else '✗'}")
+                typer.echo(f"Longest chain length:   {viral.longest_chain_length}")
+                typer.echo(f"Total viral chains:     {viral.total_viral_chains}")
+                typer.echo(f"Viral criteria met:     {'✓' if viral.viral_criteria_met else '✗'}")
                 typer.echo("\nViral criteria: ≥3 replies OR ≥10 upvotes per comment")
 
-                if analysis.viral_criteria_met:
+                if viral.viral_criteria_met:
                     typer.echo("\n🏆 Longest viral chain (comments):")
-                    for i, comment_id in enumerate(analysis.longest_chain_comments, 1):
+                    for i, comment_id in enumerate(viral.longest_chain_comments, 1):
                         typer.echo(f"  {i}. Comment #{comment_id}")
                 else:
                     typer.echo("\n💔 No viral chains found for this post")

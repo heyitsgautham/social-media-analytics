@@ -59,26 +59,33 @@ class RedisClient:
     @property
     def is_available(self) -> bool:
         """Check if Redis is available."""
-        return self._enabled and self._client is not None
+        return self._active_client() is not None
+
+    def _active_client(self) -> redis.Redis | None:
+        """Return the connected client, or None when caching is off or Redis is down."""
+        return self._client if self._enabled else None
 
     def get(self, key: str) -> str | None:
         """Get value from Redis with error handling."""
-        if not self.is_available:
+        client = self._active_client()
+        if client is None:
             return None
 
         try:
-            return self._client.get(key)
+            value = client.get(key)
+            return None if value is None else str(value)
         except Exception as e:
             print(f"Redis GET error for key {key}: {e}")
             return None
 
     def set(self, key: str, value: str, ttl: int) -> bool:
         """Set value in Redis with TTL and error handling."""
-        if not self.is_available:
+        client = self._active_client()
+        if client is None:
             return False
 
         try:
-            self._client.setex(key, ttl, value)
+            client.setex(key, ttl, value)
             return True
         except Exception as e:
             print(f"Redis SET error for key {key}: {e}")
@@ -86,11 +93,12 @@ class RedisClient:
 
     def delete(self, key: str) -> bool:
         """Delete key from Redis with error handling."""
-        if not self.is_available:
+        client = self._active_client()
+        if client is None:
             return False
 
         try:
-            self._client.delete(key)
+            client.delete(key)
             return True
         except Exception as e:
             print(f"Redis DELETE error for key {key}: {e}")
@@ -98,11 +106,12 @@ class RedisClient:
 
     def ping(self) -> bool:
         """Test Redis connectivity."""
-        if not self.is_available:
+        client = self._active_client()
+        if client is None:
             return False
 
         try:
-            self._client.ping()
+            client.ping()
             return True
         except Exception:
             return False
@@ -433,7 +442,7 @@ def populate_trending_from_db(minutes_back: int = 60) -> None:
         )
 
         # Group by minute and hashtag
-        minute_hashtag_counts = Counter()
+        minute_hashtag_counts: Counter[tuple[int, str]] = Counter()
 
         for created_at, hashtag_name in posts_with_hashtags:
             # created_at is stored as naive UTC. Calling .timestamp() on a naive value

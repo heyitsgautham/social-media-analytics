@@ -152,7 +152,7 @@ class CommentAnalyzer:
 
         # Find all viral chains using backtracking
         all_chains = []
-        longest_chain = []
+        longest_chain: list[Comment] = []
 
         for root_comment in root_comments:
             if self._is_viral_comment(root_comment):
