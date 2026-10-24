@@ -27,10 +27,12 @@ def seed_cmd(
     users: int = typer.Option(1000, help="Number of users"),
     posts: int = typer.Option(10000, help="Number of posts"),
     hashtags: int = typer.Option(150, help="Number of unique hashtags"),
+    seed: int | None = typer.Option(
+        None, "--seed", help="Random seed for reproducible data. Omit for fresh data each run."
+    ),
 ):
     """Populate the database with mock data."""
-    # Set deterministic seeds for reproducible data
-    seeder.seed_random_generators()
+    seeder.seed_random_generators(seed)
 
     with get_session() as db:
         us = seeder.make_users(db, users)
