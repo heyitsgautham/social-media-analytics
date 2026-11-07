@@ -27,7 +27,7 @@ python-dotenv==1.2.4
 redis==8.1.0
 rich==15.0.0
 shellingham==1.5.4
-sqlalchemy==2.1.6
+sqlalchemy==2.1.8
 starlette==1.10.0
 tenacity==9.2.1
 typer==0.27.3
